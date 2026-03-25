@@ -251,7 +251,7 @@ async def _call_anthropic(
     user_prompt = _build_user_prompt(topic, market_context)
     payload = {
         "model": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
-        "max_tokens": 1200,
+        "max_tokens": 4096,
         "temperature": 0.7,
         "system": "You are a SaaS strategist. Output strict JSON only.",
         "messages": [{"role": "user", "content": user_prompt}],
