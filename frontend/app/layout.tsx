@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { LanguageProvider } from "../contexts/language-context";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -9,8 +10,9 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "GroLab SaaS Starter",
-  description: "MCP-aware SaaS idea generation experience",
+  title: "GroLab — AI-Powered SaaS Idea Generator",
+  description:
+    "Generate validated SaaS ideas in seconds using real-time data from Google Trends, Product Hunt, and Reddit — powered by Claude AI.",
 };
 
 export default function RootLayout({
@@ -20,7 +22,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="tr" className="dark">
-      <body className={jakarta.className}>{children}</body>
+      <body className={jakarta.className}>
+        <LanguageProvider>{children}</LanguageProvider>
+      </body>
     </html>
   );
 }
