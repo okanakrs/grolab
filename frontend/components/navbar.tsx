@@ -31,18 +31,13 @@ export function Navbar() {
   }, []);
 
   useEffect(() => {
-    const getUser = async () => {
-      const { data } = await supabase.auth.getUser();
-      setUser(data.user);
-    };
-    void getUser();
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-    });
-
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event: string, session: { user: User } | null) => {
+        setUser(session?.user ?? null);
+      }
+    );
     return () => listener.subscription.unsubscribe();
-  }, []);
+  }, [supabase]);
 
   const onSignOut = async () => {
     await supabase.auth.signOut();
@@ -157,7 +152,7 @@ export function Navbar() {
                 onClick={() => void onSignOut()}
                 className="rounded-xl border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-[12px] font-medium text-zinc-500 transition hover:border-white/[0.12] hover:text-zinc-300"
               >
-                Çıkış
+                {t.nav.signOut}
               </button>
             </div>
           ) : (
@@ -232,7 +227,7 @@ export function Navbar() {
                 className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm text-zinc-400 transition hover:bg-white/[0.04] hover:text-zinc-200"
               >
                 <span className="h-1.5 w-1.5 rounded-full bg-zinc-700" />
-                Çıkış Yap
+                {t.nav.signOutMobile}
               </button>
             ) : (
               <Link
