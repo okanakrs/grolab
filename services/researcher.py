@@ -201,7 +201,14 @@ def _fetch_google_trends_sync(topic: str) -> list[TrendKeyword]:
 
 
 async def _fetch_google_trends(topic: str) -> list[TrendKeyword]:
-    return await asyncio.to_thread(_fetch_google_trends_sync, topic)
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(_fetch_google_trends_sync, topic),
+            timeout=15,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("google_trends_timeout topic=%s", topic)
+        return []
 
 
 def _result_or_raise(result: Any) -> Any:

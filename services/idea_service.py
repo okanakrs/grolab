@@ -136,7 +136,7 @@ async def _post_with_retry(
 ) -> httpx.Response:
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT_SECONDS) as client:
         async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(3),
+            stop=stop_after_attempt(2),
             wait=wait_exponential(multiplier=1, min=1, max=8),
             retry=retry_if_exception(_should_retry),
             reraise=True,
