@@ -121,11 +121,25 @@ export async function discoverBackendContext(): Promise<McpReference[]> {
 }
 
 export async function generateIdeas(topic: string): Promise<IdeaGenerationResponse> {
-  const response = await fetch(`${BACKEND_URL}/api/ideas/generate`, {
-    method: "POST",
-    headers: baseHeaders(),
-    body: JSON.stringify({ topic }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 120_000);
+
+  let response: Response;
+  try {
+    response = await fetch(`${BACKEND_URL}/api/ideas/generate`, {
+      method: "POST",
+      headers: baseHeaders(),
+      body: JSON.stringify({ topic }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new ApiRequestError("İstek zaman aşımına uğradı. Tekrar deneyin.", 503);
+    }
+    throw new ApiRequestError("Sunucuya bağlanılamadı. Backend çalışıyor mu?", 503);
+  }
+  clearTimeout(timeoutId);
 
   if (!response.ok) {
     const requestId = response.headers.get("X-Request-ID") ?? undefined;

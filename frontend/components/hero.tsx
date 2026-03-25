@@ -75,7 +75,7 @@ export function Hero() {
         return;
       }
 
-      if (error instanceof ApiRequestError && (error.status === 500 || error.status === 503)) {
+      if (error instanceof ApiRequestError) {
         setGenerateError({ message: error.message, requestId: error.requestId });
       } else {
         setGenerateError({ message: th.errorUnexpected });

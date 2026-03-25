@@ -105,6 +105,40 @@ def _wish_score(text: str) -> int:
     return sum(1 for r in _WISH_RE if r.search(text))
 
 
+async def _fetch_one_reddit(
+    client: httpx.AsyncClient, sub: str, query: str
+) -> list[RedditNeedPost]:
+    try:
+        resp = await client.get(
+            f"https://www.reddit.com/r/{sub}/search.json",
+            params={"q": query, "sort": "top", "t": "month", "limit": 15, "restrict_sr": 1},
+        )
+        resp.raise_for_status()
+        posts = resp.json().get("data", {}).get("children", [])
+    except Exception:
+        return []
+
+    out: list[RedditNeedPost] = []
+    for post in posts:
+        d = post.get("data", {})
+        title = (d.get("title") or "").strip()
+        selftext = (d.get("selftext") or "").strip()
+        permalink = d.get("permalink", "")
+        score = int(d.get("score") or 0)
+        ws = _wish_score(f"{title} {selftext}")
+        if ws == 0:
+            continue
+        out.append(
+            RedditNeedPost(
+                title=title,
+                subreddit=sub,
+                url=f"https://www.reddit.com{permalink}",
+                score=score * (1 + ws),
+            )
+        )
+    return out
+
+
 async def _fetch_reddit(topic: str) -> list[RedditNeedPost]:
     subreddits = os.getenv("REDDIT_SUBREDDITS", "startups,Entrepreneur,SaaS")
     subreddit_names = [s.strip() for s in subreddits.split(",") if s.strip()]
@@ -116,39 +150,15 @@ async def _fetch_reddit(topic: str) -> list[RedditNeedPost]:
     headers = {"User-Agent": "grolab-research-bot/0.1"}
     results: list[RedditNeedPost] = []
 
-    async with httpx.AsyncClient(timeout=20, headers=headers) as client:
-        for sub in subreddit_names:
-            for query in queries:
-                try:
-                    url = f"https://www.reddit.com/r/{sub}/search.json"
-                    resp = await client.get(
-                        url,
-                        params={"q": query, "sort": "top", "t": "month", "limit": 15, "restrict_sr": 1},
-                    )
-                    resp.raise_for_status()
-                    posts = resp.json().get("data", {}).get("children", [])
-                except Exception:
-                    continue
-
-                for post in posts:
-                    d = post.get("data", {})
-                    title = (d.get("title") or "").strip()
-                    selftext = (d.get("selftext") or "").strip()
-                    permalink = d.get("permalink", "")
-                    score = int(d.get("score") or 0)
-
-                    ws = _wish_score(f"{title} {selftext}")
-                    if ws == 0:
-                        continue
-
-                    results.append(
-                        RedditNeedPost(
-                            title=title,
-                            subreddit=sub,
-                            url=f"https://www.reddit.com{permalink}",
-                            score=score * (1 + ws),
-                        )
-                    )
+    async with httpx.AsyncClient(timeout=10, headers=headers) as client:
+        tasks = [
+            _fetch_one_reddit(client, sub, query)
+            for sub in subreddit_names
+            for query in queries
+        ]
+        batches = await asyncio.gather(*tasks)
+        for batch in batches:
+            results.extend(batch)
 
     seen: set[str] = set()
     unique: list[RedditNeedPost] = []
