@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 from typing import Any, Optional
 
 import httpx
@@ -81,50 +82,83 @@ async def _fetch_product_hunt(topic: str) -> list[ProductHuntProduct]:
     return products[:6]
 
 
-def _fetch_reddit_sync(topic: str) -> list[RedditNeedPost]:
-    import praw
+_WISH_PATTERNS = [
+    r"\bi (really |desperately |badly |urgently )?need\b",
+    r"\bi wish\b",
+    r"\bwhy (is there no|isn'?t there|don'?t we have)\b",
+    r"\bsomeone should (build|make|create)\b",
+    r"\bwould (love|pay) (to have|for)\b",
+    r"\bis there (a tool|an app|a service|software) (that|which|to)\b",
+    r"\blooking for (a tool|an app|a way|software)\b",
+    r"\bstuck (with|on)\b",
+    r"\bpain point\b",
+    r"\bproblem (is|with)\b",
+    r"\bstruggling (with|to)\b",
+    r"\bfrustrat(ed|ing)\b",
+    r"\bannoying (that|when|how)\b",
+]
 
-    client_id = os.getenv("REDDIT_CLIENT_ID")
-    client_secret = os.getenv("REDDIT_CLIENT_SECRET")
-    user_agent = os.getenv("REDDIT_USER_AGENT", "grolab-research-bot/0.1")
+_WISH_RE = [re.compile(p, re.I) for p in _WISH_PATTERNS]
 
-    if not client_id or not client_secret:
-        raise RuntimeError("Reddit API credentials are missing")
 
-    reddit = praw.Reddit(
-        client_id=client_id,
-        client_secret=client_secret,
-        user_agent=user_agent,
-    )
-
-    subreddits = os.getenv("REDDIT_SUBREDDITS", "startups,Entrepreneur,SaaS")
-    subreddit_names = [item.strip() for item in subreddits.split(",") if item.strip()]
-    keywords = ["problem", "need", "pain", "struggle", "frustration"]
-
-    results: list[RedditNeedPost] = []
-    query = f"{topic} problem OR need OR pain"
-
-    for subreddit_name in subreddit_names:
-        subreddit = reddit.subreddit(subreddit_name)
-        for post in subreddit.search(query, sort="top", time_filter="month", limit=15):
-            text = f"{post.title} {getattr(post, 'selftext', '')}".lower()
-            if not any(keyword in text for keyword in keywords):
-                continue
-            results.append(
-                RedditNeedPost(
-                    title=post.title,
-                    subreddit=subreddit_name,
-                    url=f"https://www.reddit.com{post.permalink}",
-                    score=int(post.score or 0),
-                )
-            )
-
-    results.sort(key=lambda item: item.score, reverse=True)
-    return results[:8]
+def _wish_score(text: str) -> int:
+    return sum(1 for r in _WISH_RE if r.search(text))
 
 
 async def _fetch_reddit(topic: str) -> list[RedditNeedPost]:
-    return await asyncio.to_thread(_fetch_reddit_sync, topic)
+    subreddits = os.getenv("REDDIT_SUBREDDITS", "startups,Entrepreneur,SaaS")
+    subreddit_names = [s.strip() for s in subreddits.split(",") if s.strip()]
+    queries = [
+        f"{topic} need OR wish OR problem",
+        f"{topic} looking for tool OR solution",
+    ]
+
+    headers = {"User-Agent": "grolab-research-bot/0.1"}
+    results: list[RedditNeedPost] = []
+
+    async with httpx.AsyncClient(timeout=20, headers=headers) as client:
+        for sub in subreddit_names:
+            for query in queries:
+                try:
+                    url = f"https://www.reddit.com/r/{sub}/search.json"
+                    resp = await client.get(
+                        url,
+                        params={"q": query, "sort": "top", "t": "month", "limit": 15, "restrict_sr": 1},
+                    )
+                    resp.raise_for_status()
+                    posts = resp.json().get("data", {}).get("children", [])
+                except Exception:
+                    continue
+
+                for post in posts:
+                    d = post.get("data", {})
+                    title = (d.get("title") or "").strip()
+                    selftext = (d.get("selftext") or "").strip()
+                    permalink = d.get("permalink", "")
+                    score = int(d.get("score") or 0)
+
+                    ws = _wish_score(f"{title} {selftext}")
+                    if ws == 0:
+                        continue
+
+                    results.append(
+                        RedditNeedPost(
+                            title=title,
+                            subreddit=sub,
+                            url=f"https://www.reddit.com{permalink}",
+                            score=score * (1 + ws),
+                        )
+                    )
+
+    seen: set[str] = set()
+    unique: list[RedditNeedPost] = []
+    for r in results:
+        if r.url not in seen:
+            seen.add(r.url)
+            unique.append(r)
+
+    unique.sort(key=lambda x: x.score, reverse=True)
+    return unique[:8]
 
 
 def _fetch_google_trends_sync(topic: str) -> list[TrendKeyword]:

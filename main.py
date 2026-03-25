@@ -9,6 +9,7 @@ from starlette.responses import Response
 
 from routers.billing import router as billing_router
 from routers.discovery import router as discovery_router
+from routers.ideas import router as ideas_router
 
 request_id_ctx_var: contextvars.ContextVar[str] = contextvars.ContextVar(
     "request_id", default="-"
@@ -47,6 +48,7 @@ app.add_middleware(
 
 app.include_router(discovery_router, prefix="/api")
 app.include_router(billing_router, prefix="/api")
+app.include_router(ideas_router, prefix="/api")
 
 
 @app.middleware("http")
