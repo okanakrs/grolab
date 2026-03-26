@@ -1,6 +1,8 @@
+import asyncio
 from datetime import datetime, timezone
 from asyncio import sleep
 import logging
+import time
 from dataclasses import dataclass
 from typing import Optional
 
@@ -60,14 +62,18 @@ async def ideas_generate(
 ) -> IdeaResponse:
     await sleep(1.4)
     request_id = getattr(request.state, "request_id", "-")
-    logger.info("ideas_generate_started request_id=%s", request_id)
+    t0 = time.perf_counter()
+    logger.info("ideas_generate_started request_id=%s topic=%r", request_id, payload.topic)
     try:
-        generation_result: IdeaGenerationResult = await generate_saas_ideas(payload.topic, request_id)
+        async with asyncio.timeout(85):
+            generation_result: IdeaGenerationResult = await generate_saas_ideas(payload.topic, request_id)
+
+        elapsed = round((time.perf_counter() - t0) * 1000)
         logger.info(
-            "ideas_generate_success request_id=%s ideas=%s evidence=%s",
+            "ideas_generate_success request_id=%s ideas=%s elapsed_ms=%s",
             request_id,
             len(generation_result.ideas),
-            len(generation_result.market_evidence),
+            elapsed,
         )
 
         consume_credit(credit_guard.user_id, amount=1)
@@ -78,6 +84,11 @@ async def ideas_generate(
             trends=generation_result.trends,
             competitors=generation_result.competitors,
         )
+    except asyncio.TimeoutError:
+        elapsed = round((time.perf_counter() - t0) * 1000)
+        logger.error("ideas_generate_timeout request_id=%s elapsed_ms=%s", request_id, elapsed)
+        raise HTTPException(status_code=503, detail="Generation timed out after 85s")
     except RuntimeError as error:
-        logger.exception("ideas_generate_failed request_id=%s", request_id)
+        elapsed = round((time.perf_counter() - t0) * 1000)
+        logger.exception("ideas_generate_failed request_id=%s elapsed_ms=%s", request_id, elapsed)
         raise HTTPException(status_code=503, detail=str(error)) from error

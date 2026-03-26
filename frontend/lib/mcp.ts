@@ -122,7 +122,13 @@ export async function discoverBackendContext(): Promise<McpReference[]> {
 
 export async function generateIdeas(topic: string): Promise<IdeaGenerationResponse> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 180_000);
+  const startTime = Date.now();
+  const timeoutId = setTimeout(() => {
+    console.error(`[mcp] AbortController fired after ${Date.now() - startTime}ms — backend took too long`);
+    controller.abort();
+  }, 180_000);
+
+  console.log(`[mcp] generateIdeas → POST ${BACKEND_URL}/api/ideas/generate`);
 
   let response: Response;
   try {
@@ -134,12 +140,15 @@ export async function generateIdeas(topic: string): Promise<IdeaGenerationRespon
     });
   } catch (err) {
     clearTimeout(timeoutId);
+    const elapsed = Date.now() - startTime;
+    console.error(`[mcp] fetch threw after ${elapsed}ms:`, err);
     if (err instanceof DOMException && err.name === "AbortError") {
-      throw new ApiRequestError("İstek zaman aşımına uğradı. Tekrar deneyin.", 503);
+      throw new ApiRequestError(`İstek zaman aşımına uğradı (${elapsed}ms). Tekrar deneyin.`, 503);
     }
-    throw new ApiRequestError("Sunucuya bağlanılamadı. Backend çalışıyor mu?", 503);
+    throw new ApiRequestError(`Sunucuya bağlanılamadı (${elapsed}ms). Backend çalışıyor mu?`, 503);
   }
   clearTimeout(timeoutId);
+  console.log(`[mcp] response received in ${Date.now() - startTime}ms — status ${response.status}`);
 
   if (!response.ok) {
     const requestId = response.headers.get("X-Request-ID") ?? undefined;
