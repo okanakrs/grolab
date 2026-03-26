@@ -33,7 +33,7 @@ class IdeaGenerationResult(BaseModel):
 
 
 LLMProvider = Literal["openai", "anthropic"]
-LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "30"))
+LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
 
 logger = logging.getLogger("grolab.idea_service")
 
@@ -136,8 +136,7 @@ async def _post_with_retry(
 ) -> httpx.Response:
     async with httpx.AsyncClient(timeout=LLM_TIMEOUT_SECONDS) as client:
         async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(2),
-            wait=wait_exponential(multiplier=1, min=1, max=8),
+            stop=stop_after_attempt(1),
             retry=retry_if_exception(_should_retry),
             reraise=True,
         ):
@@ -147,7 +146,7 @@ async def _post_with_retry(
                 response.raise_for_status()
                 return response
 
-    raise RuntimeError("LLM request failed after retries")
+    raise RuntimeError("LLM request failed")
 
 
 def _should_retry(error: BaseException) -> bool:
