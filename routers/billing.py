@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 from typing import Optional
@@ -33,9 +34,37 @@ def _get_user_id(x_user_id: Optional[str]) -> str:
     return x_user_id.strip() or "demo-user"
 
 
+async def _upsert_subscription(
+    user_id: str,
+    plan: str,
+    stripe_customer_id: Optional[str],
+    stripe_subscription_id: Optional[str],
+) -> None:
+    from services.supabase_client import get_supabase
+
+    sb = get_supabase()
+
+    def _upsert() -> None:
+        sb.table("stripe_subscriptions").upsert(
+            {
+                "user_id": user_id,
+                "plan": plan,
+                "status": "active",
+                "stripe_customer_id": stripe_customer_id,
+                "stripe_subscription_id": stripe_subscription_id,
+            },
+            on_conflict="stripe_subscription_id",
+        ).execute()
+
+    try:
+        await asyncio.to_thread(_upsert)
+    except Exception:
+        logger.warning(f"upsert_subscription_failed user_id={user_id}")
+
+
 @router.get("/credits", response_model=CreditsResponse)
 async def get_credits(x_user_id: Optional[str] = Header(default=None)) -> CreditsResponse:
-    snapshot = get_credit_snapshot(_get_user_id(x_user_id))
+    snapshot = await get_credit_snapshot(_get_user_id(x_user_id))
     return CreditsResponse(
         user_id=snapshot.user_id,
         plan=snapshot.plan,
@@ -78,7 +107,7 @@ async def create_checkout_session(
             },
         )
     except Exception as error:
-        logger.exception("checkout_session_create_failed user_id=%s", user_id)
+        logger.exception(f"checkout_session_create_failed user_id={user_id}")
         raise HTTPException(status_code=500, detail="Failed to create Stripe session") from error
 
     checkout_url = session.get("url")
@@ -113,12 +142,20 @@ async def stripe_webhook(request: Request) -> dict[str, bool]:
         metadata = session.get("metadata", {})
         user_id = metadata.get("user_id", "demo-user")
         plan = metadata.get("plan", "free")
-        snapshot = apply_plan_credits(user_id, plan)
+        snapshot = await apply_plan_credits(user_id, plan)
         logger.info(
             "checkout_completed user_id=%s plan=%s credits=%s",
             snapshot.user_id,
             snapshot.plan,
             snapshot.credits_remaining,
         )
+
+        if user_id != "demo-user":
+            await _upsert_subscription(
+                user_id=user_id,
+                plan=plan,
+                stripe_customer_id=session.get("customer"),
+                stripe_subscription_id=session.get("subscription"),
+            )
 
     return {"received": True}

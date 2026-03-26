@@ -23,7 +23,14 @@ export default function RootLayout({
   return (
     <html lang="tr" className="dark">
       <body className={jakarta.className}>
-        <LanguageProvider>{children}</LanguageProvider>
+        <LanguageProvider>
+          {children}
+          <footer className="border-t border-white/[0.04] py-6 text-center">
+            <p className="text-xs text-zinc-700">
+              © {new Date().getFullYear()} GroLab. Tüm hakları saklıdır.
+            </p>
+          </footer>
+        </LanguageProvider>
       </body>
     </html>
   );

@@ -1,15 +1,20 @@
-import { motion } from "framer-motion";
-import { useLanguage } from "../contexts/language-context";
+import { motion, AnimatePresence } from "framer-motion";
 
-type DeepResearchProgressProps = {
-  activeStepIndex: number;
+export type ResearchStep = {
+  id: string;
+  icon: string;
+  label: string;
+  detail?: string;
+  status: "pending" | "active" | "done";
 };
 
-export function DeepResearchProgress({ activeStepIndex }: DeepResearchProgressProps) {
-  const { t } = useLanguage();
-  const { steps, title } = t.progress;
-  const ICONS = ["📈", "🚀", "🧠"];
-  const progress = Math.round(((activeStepIndex + 1) / steps.length) * 100);
+type Props = {
+  steps: ResearchStep[];
+};
+
+export function DeepResearchProgress({ steps }: Props) {
+  const doneCount = steps.filter((s) => s.status === "done").length;
+  const progress = steps.length === 0 ? 0 : Math.round((doneCount / steps.length) * 100);
 
   return (
     <motion.section
@@ -20,7 +25,7 @@ export function DeepResearchProgress({ activeStepIndex }: DeepResearchProgressPr
     >
       <div className="mb-4 flex items-center justify-between">
         <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
-          {title}
+          Araştırılıyor
         </p>
         <span className="font-mono text-xs text-zinc-600">{progress}%</span>
       </div>
@@ -36,69 +41,69 @@ export function DeepResearchProgress({ activeStepIndex }: DeepResearchProgressPr
       </div>
 
       <ul className="space-y-2">
-        {steps.map((step, index) => {
-          const isCompleted = index < activeStepIndex;
-          const isActive = index === activeStepIndex;
+        {steps.map((step) => (
+          <motion.li
+            key={step.id}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            className={[
+              "flex items-center gap-3 rounded-xl border px-4 py-3 transition",
+              step.status === "active"
+                ? "border-emerald-500/30 bg-emerald-500/[0.08]"
+                : step.status === "done"
+                ? "border-zinc-800/60 bg-zinc-900/30"
+                : "border-zinc-800/40 bg-zinc-950/30",
+            ].join(" ")}
+          >
+            <span className="text-base leading-none">{step.icon}</span>
 
-          return (
-            <motion.li
-              key={step.label}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: index * 0.08 }}
-              className={[
-                "flex items-center gap-3 rounded-xl border px-4 py-3 transition",
-                isActive
-                  ? "border-emerald-500/30 bg-emerald-500/[0.08]"
-                  : isCompleted
-                  ? "border-zinc-800/60 bg-zinc-900/30"
-                  : "border-zinc-800/40 bg-zinc-950/30",
-              ].join(" ")}
-            >
-              <span className="text-base leading-none">{ICONS[index]}</span>
-
-              <div className="min-w-0 flex-1">
-                <p
-                  className={`text-sm font-medium ${
-                    isActive
-                      ? "text-emerald-200"
-                      : isCompleted
-                      ? "text-zinc-500"
-                      : "text-zinc-700"
-                  }`}
-                >
-                  {step.label}
-                </p>
-                <p className="truncate text-[11px] text-zinc-700">{step.sub}</p>
-              </div>
-
-              <span className="ml-2 flex-shrink-0">
-                {isCompleted ? (
-                  <motion.span
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: "spring", stiffness: 400, damping: 20 }}
-                    className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-400"
+            <div className="min-w-0 flex-1">
+              <p className={`text-sm font-medium ${
+                step.status === "active" ? "text-emerald-200"
+                : step.status === "done" ? "text-zinc-500"
+                : "text-zinc-700"
+              }`}>
+                {step.label}
+              </p>
+              <AnimatePresence>
+                {step.detail && (
+                  <motion.p
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    className="text-[11px] text-emerald-400/70"
                   >
-                    ✓
-                  </motion.span>
-                ) : isActive ? (
-                  <motion.span
-                    animate={{ opacity: [0.3, 1, 0.3] }}
-                    transition={{ duration: 1.2, repeat: Number.POSITIVE_INFINITY }}
-                    className="flex h-5 w-5 items-center justify-center rounded-full border border-emerald-500/40 text-[10px] text-emerald-400"
-                  >
-                    ●
-                  </motion.span>
-                ) : (
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full border border-zinc-800 text-[10px] text-zinc-700">
-                    ○
-                  </span>
+                    {step.detail}
+                  </motion.p>
                 )}
-              </span>
-            </motion.li>
-          );
-        })}
+              </AnimatePresence>
+            </div>
+
+            <span className="ml-2 flex-shrink-0">
+              {step.status === "done" ? (
+                <motion.span
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 20 }}
+                  className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-400"
+                >
+                  ✓
+                </motion.span>
+              ) : step.status === "active" ? (
+                <motion.span
+                  animate={{ opacity: [0.3, 1, 0.3] }}
+                  transition={{ duration: 1.2, repeat: Number.POSITIVE_INFINITY }}
+                  className="flex h-5 w-5 items-center justify-center rounded-full border border-emerald-500/40 text-[10px] text-emerald-400"
+                >
+                  ●
+                </motion.span>
+              ) : (
+                <span className="flex h-5 w-5 items-center justify-center rounded-full border border-zinc-800 text-[10px] text-zinc-700">
+                  ○
+                </span>
+              )}
+            </span>
+          </motion.li>
+        ))}
       </ul>
     </motion.section>
   );

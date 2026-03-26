@@ -20,6 +20,10 @@ export function Navbar() {
 
   useEffect(() => {
     const loadCredits = async () => {
+      if (!user) {
+        setCredits(null);
+        return;
+      }
       try {
         const snapshot = await fetchCredits();
         setCredits(snapshot);
@@ -28,7 +32,11 @@ export function Navbar() {
       }
     };
     void loadCredits();
-  }, []);
+
+    const handler = () => { void loadCredits(); };
+    window.addEventListener("credits-updated", handler);
+    return () => window.removeEventListener("credits-updated", handler);
+  }, [user]);
 
   useEffect(() => {
     const { data: listener } = supabase.auth.onAuthStateChange(
@@ -140,6 +148,16 @@ export function Navbar() {
           {/* Auth area */}
           {user ? (
             <div className="hidden items-center gap-2 sm:flex">
+              <Link
+                href="/dashboard"
+                className={`rounded-xl border px-3 py-2 text-[12px] font-medium transition ${
+                  pathname === "/dashboard"
+                    ? "border-emerald-500/30 bg-emerald-500/[0.08] text-emerald-300"
+                    : "border-white/[0.07] bg-white/[0.03] text-zinc-500 hover:border-white/[0.12] hover:text-zinc-300"
+                }`}
+              >
+                Fikirlerim
+              </Link>
               <div className="flex items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.03] px-3 py-1.5">
                 <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-[10px] font-bold text-black">
                   {(userDisplayName?.[0] ?? "U").toUpperCase()}
@@ -222,13 +240,27 @@ export function Navbar() {
             ))}
             <div className="mx-2 my-2 h-px bg-white/[0.05]" />
             {user ? (
-              <button
-                onClick={() => { void onSignOut(); setMenuOpen(false); }}
-                className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm text-zinc-400 transition hover:bg-white/[0.04] hover:text-zinc-200"
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-zinc-700" />
-                {t.nav.signOutMobile}
-              </button>
+              <>
+                <Link
+                  href="/dashboard"
+                  onClick={() => setMenuOpen(false)}
+                  className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
+                    pathname === "/dashboard"
+                      ? "bg-emerald-500/[0.07] text-emerald-300"
+                      : "text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200"
+                  }`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full ${pathname === "/dashboard" ? "bg-emerald-400" : "bg-zinc-700"}`} />
+                  Fikirlerim
+                </Link>
+                <button
+                  onClick={() => { void onSignOut(); setMenuOpen(false); }}
+                  className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm text-zinc-400 transition hover:bg-white/[0.04] hover:text-zinc-200"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-zinc-700" />
+                  {t.nav.signOutMobile}
+                </button>
+              </>
             ) : (
               <Link
                 href="/sign-in"

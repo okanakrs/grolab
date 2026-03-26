@@ -1,6 +1,10 @@
+import asyncio
+import logging
 import threading
 from dataclasses import dataclass
 from typing import Optional, Union
+
+logger = logging.getLogger("grolab.billing_service")
 
 PLAN_TOTAL_CREDITS = {
     "free": 10,
@@ -9,8 +13,8 @@ PLAN_TOTAL_CREDITS = {
 }
 
 _DEFAULT_USER_ID = "demo-user"
-_lock = threading.Lock()
-_state: dict[str, dict[str, Union[int, str]]] = {}
+_lock = threading.RLock()
+_demo_state: dict[str, dict[str, Union[int, str]]] = {}
 
 
 @dataclass
@@ -27,48 +31,101 @@ def _normalize_user_id(user_id: Optional[str]) -> str:
     return user_id.strip() or _DEFAULT_USER_ID
 
 
-def _ensure_user(user_id: str) -> dict[str, Union[int, str]]:
+def _is_demo(user_id: str) -> bool:
+    return user_id == _DEFAULT_USER_ID
+
+
+def _ensure_demo_user(user_id: str) -> dict[str, Union[int, str]]:
     with _lock:
-        if user_id not in _state:
-            _state[user_id] = {
+        if user_id not in _demo_state:
+            _demo_state[user_id] = {
                 "plan": "free",
                 "credits_total": PLAN_TOTAL_CREDITS["free"],
                 "credits_remaining": PLAN_TOTAL_CREDITS["free"],
             }
-        return _state[user_id]
+        return _demo_state[user_id]
 
 
-def get_credit_snapshot(user_id: Optional[str]) -> CreditSnapshot:
-    normalized_user_id = _normalize_user_id(user_id)
-    user_data = _ensure_user(normalized_user_id)
-    return CreditSnapshot(
-        user_id=normalized_user_id,
-        plan=str(user_data["plan"]),
-        credits_remaining=int(user_data["credits_remaining"]),
-        credits_total=int(user_data["credits_total"]),
-    )
+async def get_credit_snapshot(user_id: Optional[str]) -> CreditSnapshot:
+    uid = _normalize_user_id(user_id)
+
+    if _is_demo(uid):
+        data = _ensure_demo_user(uid)
+        return CreditSnapshot(
+            user_id=uid,
+            plan=str(data["plan"]),
+            credits_remaining=int(data["credits_remaining"]),
+            credits_total=int(data["credits_total"]),
+        )
+
+    try:
+        from services.supabase_client import get_supabase
+        sb = get_supabase()
+
+        def _fetch() -> dict:
+            return sb.table("profiles").select("plan,credits_remaining,credits_total").eq("id", uid).single().execute().data
+
+        row = await asyncio.to_thread(_fetch)
+        return CreditSnapshot(
+            user_id=uid,
+            plan=row["plan"],
+            credits_remaining=row["credits_remaining"],
+            credits_total=row["credits_total"],
+        )
+    except Exception:
+        logger.warning(f"profiles_fetch_failed user_id={uid}, returning defaults")
+        return CreditSnapshot(user_id=uid, plan="free", credits_remaining=10, credits_total=10)
 
 
-def consume_credit(user_id: Optional[str], amount: int = 1) -> bool:
-    normalized_user_id = _normalize_user_id(user_id)
-    with _lock:
-        user_data = _ensure_user(normalized_user_id)
-        remaining = int(user_data["credits_remaining"])
-        if remaining < amount:
-            return False
-        user_data["credits_remaining"] = remaining - amount
-        return True
+async def consume_credit(user_id: Optional[str], amount: int = 1) -> bool:
+    uid = _normalize_user_id(user_id)
+
+    if _is_demo(uid):
+        with _lock:
+            data = _ensure_demo_user(uid)
+            remaining = int(data["credits_remaining"])
+            if remaining < amount:
+                return False
+            data["credits_remaining"] = remaining - amount
+            return True
+
+    try:
+        from services.supabase_client import get_supabase
+        sb = get_supabase()
+
+        def _consume() -> bool:
+            result = sb.rpc("consume_credits", {"p_user_id": uid, "p_amount": amount}).execute()
+            return bool(result.data)
+
+        return await asyncio.to_thread(_consume)
+    except Exception:
+        logger.exception(f"consume_credit_failed user_id={uid}")
+        return False
 
 
-def apply_plan_credits(user_id: Optional[str], plan: str) -> CreditSnapshot:
-    normalized_user_id = _normalize_user_id(user_id)
+async def apply_plan_credits(user_id: Optional[str], plan: str) -> CreditSnapshot:
+    uid = _normalize_user_id(user_id)
     plan_key = plan if plan in PLAN_TOTAL_CREDITS else "free"
     total = PLAN_TOTAL_CREDITS[plan_key]
 
-    with _lock:
-        user_data = _ensure_user(normalized_user_id)
-        user_data["plan"] = plan_key
-        user_data["credits_total"] = total
-        user_data["credits_remaining"] = total
+    if _is_demo(uid):
+        with _lock:
+            data = _ensure_demo_user(uid)
+            data["plan"] = plan_key
+            data["credits_total"] = total
+            data["credits_remaining"] = total
+        return await get_credit_snapshot(uid)
 
-    return get_credit_snapshot(normalized_user_id)
+    try:
+        from services.supabase_client import get_supabase
+        sb = get_supabase()
+
+        def _update() -> None:
+            sb.table("profiles").update(
+                {"plan": plan_key, "credits_total": total, "credits_remaining": total}
+            ).eq("id", uid).execute()
+
+        await asyncio.to_thread(_update)
+    except Exception:
+        logger.warning(f"apply_plan_credits_failed user_id={uid}")
+    return await get_credit_snapshot(uid)

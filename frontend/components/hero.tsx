@@ -3,26 +3,24 @@
 import { motion, type Variants } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { DeepResearchProgress } from "./deep-research-progress";
+import { DeepResearchProgress, type ResearchStep } from "./deep-research-progress";
 import { GenerationErrorState } from "./generation-error-state";
 import { useLanguage } from "../contexts/language-context";
 import {
   ApiRequestError,
-  discoverBackendContext,
   fetchCredits,
-  generateIdeas,
+  generateIdeasStream,
   type IdeaGenerationResponse,
   type McpReference,
   type SaaSIdea,
 } from "../lib/mcp";
+import { IdeaPanel } from "./idea-panel";
 
 export function Hero() {
   const router = useRouter();
   const { t } = useLanguage();
   const th = t.hero;
 
-  const [references, setReferences] = useState<McpReference[]>([]);
-  const [isDiscoveryLoading, setIsDiscoveryLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [topic, setTopic] = useState("");
   const [ideas, setIdeas] = useState<SaaSIdea[]>([]);
@@ -32,20 +30,20 @@ export function Hero() {
     trends: [],
     competitors: [],
   });
-  const [loadingStageIndex, setLoadingStageIndex] = useState(0);
   const [generateError, setGenerateError] = useState<{
     message: string;
     requestId?: string;
   } | null>(null);
+  const [researchSteps, setResearchSteps] = useState<ResearchStep[]>([]);
+  // Yeni: Kaç fikir üretileceğini tutan state
+  const [ideaCount, setIdeaCount] = useState(3);
+  const [userPlan, setUserPlan] = useState("free");
 
   useEffect(() => {
     const loadContext = async () => {
-      const discovered = await discoverBackendContext();
-      setReferences(discovered);
-      setIsDiscoveryLoading(false);
-
       try {
         const creditStatus = await fetchCredits();
+        setUserPlan(creditStatus.plan);
         if (creditStatus.credits_remaining <= 0) {
           router.push("/pricing");
         }
@@ -57,24 +55,50 @@ export function Hero() {
     void loadContext();
   }, [router]);
 
+  const STEP_META: Record<string, { icon: string; label: string }> = {
+    research_start: { icon: "🔍", label: "Pazar araştırması başlıyor..." },
+    reddit_done:    { icon: "💬", label: "Reddit tarıyorum..." },
+    hn_done:        { icon: "🟧", label: "Hacker News analiz ediyorum..." },
+    producthunt_done: { icon: "🚀", label: "Product Hunt tarıyorum..." },
+    trends_done:    { icon: "📈", label: "Google Trends analiz ediyorum..." },
+    appstore_done:  { icon: "📱", label: "App Store inceliyorum..." },
+    llm_start:      { icon: "🧠", label: "Fırsat skoru hesaplanıyor..." },
+  };
+
   const onGenerate = async () => {
     setIsGenerating(true);
-    setLoadingStageIndex(0);
+    setResearchSteps([]);
     setIdeas([]);
     setEvidence({ ideas: [], market_evidence: [], trends: [], competitors: [] });
     setGenerateError(null);
 
     try {
-      const promptTopic = topic.trim() || "AI SaaS idea";
-      const nextIdeas = await generateIdeas(promptTopic);
-      setIdeas(nextIdeas.ideas);
-      setEvidence(nextIdeas);
-    } catch (error) {
-      if (error instanceof ApiRequestError && error.status === 402) {
-        router.push("/pricing");
-        return;
+      for await (const event of generateIdeasStream(topic.trim(), ideaCount)) {
+        if (event.step === "error") {
+          if (event.status === 402) { router.push("/pricing"); return; }
+          setGenerateError({ message: event.message });
+          return;
+        }
+        if (event.step === "done") {
+          setIdeas(event.ideas ?? []);
+          setEvidence({ ideas: event.ideas ?? [], market_evidence: event.market_evidence ?? [], trends: event.trends ?? [], competitors: event.competitors ?? [] });
+          window.dispatchEvent(new CustomEvent("credits-updated"));
+          return;
+        }
+        // progress event
+        const meta = STEP_META[event.step];
+        if (!meta) continue;
+        const detail = event.count > 0 ? `${event.count} sonuç bulundu` : undefined;
+        setResearchSteps((prev) => {
+          const existing = prev.find((s) => s.id === event.step);
+          if (existing) {
+            return prev.map((s) => s.id === event.step ? { ...s, status: "done", detail: detail ?? s.detail } : s.status === "active" ? { ...s, status: "done" } : s);
+          }
+          const updated = prev.map((s) => s.status === "active" ? { ...s, status: "done" as const } : s);
+          return [...updated, { id: event.step, icon: meta.icon, label: meta.label, detail, status: "active" as const }];
+        });
       }
-
+    } catch (error) {
       if (error instanceof ApiRequestError) {
         setGenerateError({ message: error.message, requestId: error.requestId });
       } else {
@@ -84,16 +108,6 @@ export function Hero() {
       setIsGenerating(false);
     }
   };
-
-  useEffect(() => {
-    if (!isGenerating) return;
-
-    const timer = setInterval(() => {
-      setLoadingStageIndex((prev) => Math.min(prev + 1, th.loadingStages.length - 1));
-    }, 1300);
-
-    return () => clearInterval(timer);
-  }, [isGenerating, th.loadingStages.length]);
 
   const container: Variants = {
     hidden: { opacity: 0 },
@@ -165,19 +179,10 @@ export function Hero() {
       >
         {th.subtitleStart}{" "}
         <strong className="font-medium text-zinc-200">{th.subtitlePH}</strong>,{" "}
-        <strong className="font-medium text-zinc-200">{th.subtitleGT}</strong>{" "}
-        {th.subtitleEnd.includes("ve") || th.subtitleEnd.startsWith("data") ? "" : "ve "}
-        {th.subtitleEnd.startsWith("data") ? (
-          <>
-            <strong className="font-medium text-zinc-200">{th.subtitleReddit}</strong>{" "}
-            {th.subtitleEnd}
-          </>
-        ) : (
-          <>
-            <strong className="font-medium text-zinc-200">{th.subtitleReddit}</strong>{" "}
-            {th.subtitleEnd}
-          </>
-        )}
+        <strong className="font-medium text-zinc-200">{th.subtitleGT}</strong>,{" "}
+        <strong className="font-medium text-zinc-200">{th.subtitleReddit}</strong>,{" "}
+        <strong className="font-medium text-zinc-200">Hacker News</strong>{" "}
+        {th.subtitleEnd}
       </motion.p>
 
       {/* Stats */}
@@ -235,7 +240,28 @@ export function Hero() {
             ))}
           </div>
 
-          <div className="mt-5 flex items-center justify-end">
+          <div className="mt-5 flex items-center justify-end gap-3">
+            {/* Fikir adedi seçici */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-zinc-600 font-medium select-none">Fikir sayısı</span>
+              <div className="flex items-center rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
+                {[1, 2, 3].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setIdeaCount(n)}
+                    disabled={isGenerating}
+                    className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all duration-150 focus:outline-none disabled:cursor-not-allowed
+                      ${ideaCount === n
+                        ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-inset ring-emerald-500/25"
+                        : "text-zinc-500 hover:text-zinc-300"}`}
+                    aria-label={`${n} fikir üret`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
             <motion.button
               onClick={onGenerate}
               disabled={isGenerating}
@@ -264,7 +290,7 @@ export function Hero() {
         <div className="border-t border-white/[0.04] bg-black/30 px-5 py-2.5">
           <p className="font-mono text-[11px] text-zinc-700">
             {isGenerating
-              ? `⟳  ${th.loadingStages[loadingStageIndex]}`
+              ? `⟳  ${researchSteps.find(s => s.status === "active")?.label ?? "Başlatılıyor..."}`
               : th.statusReady}
           </p>
         </div>
@@ -272,7 +298,7 @@ export function Hero() {
 
       {/* Dynamic area */}
       {isGenerating ? (
-        <DeepResearchProgress activeStepIndex={loadingStageIndex} />
+        <DeepResearchProgress steps={researchSteps} />
       ) : generateError ? (
         <GenerationErrorState
           message={generateError.message}
@@ -280,132 +306,14 @@ export function Hero() {
           onRetry={onGenerate}
         />
       ) : ideas.length > 0 ? (
-        <motion.div variants={container} initial="hidden" animate="show" className="mt-10">
-          <motion.div variants={item} className="mb-5 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-white">
-              {th.ideasGenerated(ideas.length)}
-            </h2>
-            <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300">
-              {th.marketSupported}
-            </span>
-          </motion.div>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            {ideas.map((idea, index) => (
-              <motion.article
-                key={`${idea.isim}-${index}`}
-                variants={item}
-                whileHover={{ y: -3, transition: { duration: 0.2 } }}
-                className="group relative overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5 backdrop-blur-sm transition hover:border-white/[0.12] hover:bg-white/[0.04]"
-              >
-                <div className="pointer-events-none absolute right-0 top-0 h-28 w-28 bg-gradient-to-bl from-emerald-500/10 to-transparent opacity-0 transition group-hover:opacity-100" />
-
-                <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-400">
-                  #{index + 1}
-                </span>
-
-                <h3 className="mt-3 text-base font-bold leading-tight text-white">
-                  {idea.isim}
-                </h3>
-                <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-zinc-600">
-                  {idea.problem}
-                </p>
-
-                <div className="mt-4 space-y-2">
-                  <div className="rounded-xl bg-zinc-950/80 p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-700">
-                      {th.solution}
-                    </p>
-                    <p className="mt-1 text-xs leading-relaxed text-zinc-400">{idea.cozum}</p>
-                  </div>
-                  <div className="rounded-xl bg-zinc-950/80 p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-700">
-                      {th.targetAudience}
-                    </p>
-                    <p className="mt-1 text-xs text-zinc-400">{idea.hedef_kitle}</p>
-                  </div>
-                  <div className="rounded-xl bg-zinc-950/80 p-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-700">
-                      {th.estimatedMRR}
-                    </p>
-                    <p className="mt-1 text-xs font-medium text-emerald-400">
-                      {idea.tahmini_mrr_potansiyeli}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Evidence */}
-                <div className="mt-4 rounded-xl border border-white/[0.05] bg-black/30 p-3">
-                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-700">
-                    {th.marketEvidence}
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {evidence.market_evidence.slice(0, 2).map((e) => (
-                      <span
-                        key={e}
-                        className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-400"
-                      >
-                        {e}
-                      </span>
-                    ))}
-                    {evidence.trends.slice(0, 1).map((trend) => (
-                      <span
-                        key={trend}
-                        className="rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] text-indigo-400"
-                      >
-                        {trend}
-                      </span>
-                    ))}
-                    {evidence.competitors.slice(0, 1).map((c) => (
-                      <span
-                        key={c}
-                        className="rounded-full border border-zinc-700/50 bg-zinc-800/50 px-2 py-0.5 text-[10px] text-zinc-500"
-                      >
-                        {c}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </motion.article>
-            ))}
-          </div>
-        </motion.div>
+        <IdeaPanel
+          ideas={ideas}
+          evidence={evidence}
+          userPlan={userPlan}
+          th={th}
+        />
       ) : null}
 
-      {/* MCP References */}
-      <motion.div
-        variants={item}
-        id="mcp"
-        className="mt-14 rounded-2xl border border-white/[0.05] bg-black/20 p-5"
-      >
-        <div className="mb-3 flex items-center gap-2">
-          <span className="relative flex h-1.5 w-1.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-50" />
-            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
-          </span>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-zinc-600">
-            {th.mcpTitle}
-          </p>
-        </div>
-        <ul className="grid gap-1.5 sm:grid-cols-2">
-          {isDiscoveryLoading ? (
-            <li className="font-mono text-xs text-zinc-700">{th.mcpScanning}</li>
-          ) : (
-            references.map((reference) => (
-              <li
-                key={reference.id}
-                className="flex items-center gap-2 rounded-xl border border-zinc-800/50 bg-zinc-900/20 px-3 py-2"
-              >
-                <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-400/50" />
-                <span className="text-xs text-zinc-600">
-                  {reference.label}:{" "}
-                  <code className="font-mono text-zinc-500">{reference.path}</code>
-                </span>
-              </li>
-            ))
-          )}
-        </ul>
-      </motion.div>
     </motion.section>
   );
 }
