@@ -124,12 +124,37 @@ function buildRequestId(): string {
   return `req-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+let _guestToken: string | null = null;
+
+async function getGuestToken(): Promise<string> {
+  if (typeof window === "undefined") return "";
+  if (_guestToken) return _guestToken;
+  try {
+    const res = await fetch("/api/guest-token");
+    const data = await res.json() as { token: string | null };
+    _guestToken = data.token ?? "";
+  } catch {
+    _guestToken = "";
+  }
+  return _guestToken;
+}
+
+export function clearGuestToken(): void {
+  _guestToken = null;
+}
+
 async function baseHeaders(): Promise<HeadersInit> {
-  return {
+  const userId = await getUserId();
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "X-Request-ID": buildRequestId(),
-    "X-User-ID": await getUserId(),
+    "X-User-ID": userId,
   };
+  if (userId === FALLBACK_USER_ID) {
+    const guestToken = await getGuestToken();
+    if (guestToken) headers["X-Guest-Token"] = guestToken;
+  }
+  return headers;
 }
 
 export async function discoverBackendContext(): Promise<McpReference[]> {
@@ -249,10 +274,24 @@ export async function* generateIdeasStream(
     idea_count: String(ideaCount),
   });
 
-  const response = await fetch(`${BACKEND_URL}/api/ideas/stream?${params}`, {
-    method: "GET",
-    headers: await baseHeaders(),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 150_000); // 150s
+
+  let response: Response;
+  try {
+    response = await fetch(`${BACKEND_URL}/api/ideas/stream?${params}`, {
+      method: "GET",
+      headers: await baseHeaders(),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if ((err as Error).name === "AbortError") {
+      throw new ApiRequestError("İstek zaman aşımına uğradı", 408);
+    }
+    throw err;
+  }
+  clearTimeout(timeoutId);
 
   if (!response.ok || !response.body) {
     throw new ApiRequestError("Stream başlatılamadı", response.status);

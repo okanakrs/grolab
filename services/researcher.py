@@ -74,7 +74,7 @@ async def _fetch_product_hunt(topic: str) -> list[ProductHuntProduct]:
         "Content-Type": "application/json",
     }
     payload = {
-        "params": f"query={topic}+saas&hitsPerPage=20",
+        "params": f"query={topic}+saas&hitsPerPage=40",
     }
 
     async with httpx.AsyncClient(timeout=20) as client:
@@ -114,7 +114,7 @@ async def _fetch_product_hunt(topic: str) -> list[ProductHuntProduct]:
 
     # Oy sayısına göre sırala
     products.sort(key=lambda p: p.votes_count, reverse=True)
-    return products[:6]
+    return products[:15]
 
 
 _APIFY_BASE = "https://api.apify.com/v2"
@@ -216,39 +216,38 @@ async def _fetch_reddit_apify(topic: str) -> list[RedditNeedPost]:
         ))
 
     out.sort(key=lambda x: x.score, reverse=True)
-    return out[:8]
+    return out[:15]
 
 
 async def _fetch_app_store_reviews(topic: str) -> list[AppStoreReview]:
-    """Apify epctex/appstore-scraper ile konu araması yapıp düşük puanlı yorumları çek."""
+    """Apify supreme_scraper/apple-apps-store-scraper ile konu araması yapıp uygulama listesi çek."""
     items = await _apify_run(
-        "epctex/appstore-scraper",
+        "supreme_scraper/apple-apps-store-scraper",
         {
-            "keyword": topic,
-            "country": "US",
-            "maxReviews": 20,
-            "scrapeReviews": True,
+            "action": "scrapeAppSearch",
+            "scrapeAppSearch.keywords": [topic],
+            "scrapeAppSearch.country": "us",
+            "count": 10,
         },
     )
 
     out: list[AppStoreReview] = []
     for item in items:
         app_name = (item.get("title") or item.get("name") or "").strip()
-        app_id = str(item.get("id") or item.get("appId") or "")
-        reviews = item.get("reviews") or []
-        for r in reviews:
-            body = (r.get("review") or r.get("text") or r.get("body") or "").strip()
-            rating = int(r.get("score") or r.get("rating") or 0)
-            if not body or rating > 2:
-                continue
-            out.append(AppStoreReview(
-                app_name=app_name,
-                review=body[:300],
-                rating=rating,
-                app_id=app_id,
-            ))
+        app_id = str(item.get("id") or item.get("trackId") or "")
+        # Rating ve description'ı review olarak kullan
+        rating = int(item.get("averageUserRating") or item.get("rating") or 0)
+        description = (item.get("description") or item.get("subtitle") or "").strip()
+        if not app_name or not description:
+            continue
+        out.append(AppStoreReview(
+            app_name=app_name,
+            review=description[:300],
+            rating=rating,
+            app_id=app_id,
+        ))
 
-    return out[:10]
+    return out[:15]
 
 
 _WISH_PATTERNS = [
@@ -280,7 +279,7 @@ async def _fetch_one_reddit(
     try:
         resp = await client.get(
             f"https://www.reddit.com/r/{sub}/search.json",
-            params={"q": query, "sort": "top", "t": "month", "limit": 15, "restrict_sr": 1},
+            params={"q": query, "sort": "top", "t": "year", "limit": 25, "restrict_sr": 1},
         )
         resp.raise_for_status()
         posts = resp.json().get("data", {}).get("children", [])
@@ -319,12 +318,14 @@ async def _fetch_hn(topic: str) -> list[HNPost]:
     queries = [
         f"Ask HN {topic}",
         f"{topic} tool",
+        f"{topic} alternative",
+        f"{topic} problem",
     ]
 
     posts: list[HNPost] = []
     seen: set[str] = set()
 
-    async with httpx.AsyncClient(timeout=12) as client:
+    async with httpx.AsyncClient(timeout=15) as client:
         for query in queries:
             try:
                 resp = await client.get(
@@ -332,8 +333,8 @@ async def _fetch_hn(topic: str) -> list[HNPost]:
                     params={
                         "query": query,
                         "tags": "story",
-                        "hitsPerPage": 15,
-                        "numericFilters": "points>5",
+                        "hitsPerPage": 25,
+                        "numericFilters": "points>3",
                     },
                 )
                 resp.raise_for_status()
@@ -357,15 +358,16 @@ async def _fetch_hn(topic: str) -> list[HNPost]:
                 posts.append(HNPost(title=title, url=url, score=score, comments=comments))
 
     posts.sort(key=lambda x: x.score + x.comments, reverse=True)
-    return posts[:8]
+    return posts[:15]
 
 
 async def _fetch_reddit(topic: str) -> list[RedditNeedPost]:
-    subreddits = os.getenv("REDDIT_SUBREDDITS", "startups,Entrepreneur,SaaS")
+    subreddits = os.getenv("REDDIT_SUBREDDITS", "startups,Entrepreneur,SaaS,smallbusiness,webdev,programming")
     subreddit_names = [s.strip() for s in subreddits.split(",") if s.strip()]
     queries = [
         f"{topic} need OR wish OR problem",
         f"{topic} looking for tool OR solution",
+        f"{topic} frustrated OR struggling OR annoying",
     ]
 
     headers = {"User-Agent": "grolab-research-bot/0.1"}
@@ -389,7 +391,7 @@ async def _fetch_reddit(topic: str) -> list[RedditNeedPost]:
             unique.append(r)
 
     unique.sort(key=lambda x: x.score, reverse=True)
-    return unique[:8]
+    return unique[:20]
 
 
 def _fetch_google_trends_sync(topic: str) -> list[TrendKeyword]:
@@ -418,7 +420,17 @@ def _fetch_google_trends_sync(topic: str) -> list[TrendKeyword]:
             continue
         ranked.append(TrendKeyword(keyword=keyword, value=value))
 
-    return ranked[:8]
+    # Hem rising hem top sinyalleri al
+    top = related_queries.get("top", [])
+    for item in top:
+        keyword = str(item.get("query") or "").strip()
+        value = str(item.get("value") or "").strip()
+        if not keyword:
+            continue
+        if not any(kw.keyword == keyword for kw in ranked):
+            ranked.append(TrendKeyword(keyword=keyword, value=value))
+
+    return ranked[:15]
 
 
 async def _fetch_google_trends(topic: str) -> list[TrendKeyword]:
@@ -446,12 +458,14 @@ async def research_market(
     topic: str,
     request_id: Optional[str] = None,
     on_progress: Optional[ProgressCallback] = None,
+    plan: str = "free",
 ) -> MarketContext:
     req_id = request_id or "-"
-    logger.info(f"market_research_started topic={topic} request_id={req_id} apify={_use_apify()}")
+    is_pro = plan in ("pro", "enterprise")
+    logger.info(f"market_research_started topic={topic} request_id={req_id} plan={plan} apify={_use_apify()}")
 
     reddit_fetcher = _fetch_reddit_apify if _use_apify() else _fetch_reddit
-    app_store_fetcher = _fetch_app_store_reviews if _use_apify() else None
+    app_store_fetcher = (_fetch_app_store_reviews if _use_apify() else None) if is_pro else None
 
     async def _tracked(coro, step: str, label: str):
         result = await coro
@@ -464,7 +478,7 @@ async def research_market(
         _tracked(_fetch_product_hunt(topic), "producthunt_done", "Product Hunt"),
         _tracked(reddit_fetcher(topic), "reddit_done", "Reddit"),
         _tracked(_fetch_google_trends(topic), "trends_done", "Google Trends"),
-        _tracked(_fetch_hn(topic), "hn_done", "Hacker News"),
+        *((_tracked(_fetch_hn(topic), "hn_done", "Hacker News"),) if is_pro else ()),
         *((_tracked(app_store_fetcher(topic), "appstore_done", "App Store"),) if app_store_fetcher else ()),
     )
 
@@ -498,15 +512,19 @@ async def research_market(
         source_errors.append("google_trends_unavailable")
         trend_keywords = []
 
-    try:
-        hn_posts = _result_or_raise(results[3])
-    except Exception as error:
-        logger.warning(f"market_research_hn_failed error={error} request_id={req_id}")
-        source_errors.append("hn_unavailable")
-
-    if app_store_fetcher and len(results) > 4:
+    # Pro-only sources — indices shift based on how many tasks were added
+    next_idx = 3
+    if is_pro:
         try:
-            app_store_reviews = _result_or_raise(results[4])
+            hn_posts = _result_or_raise(results[next_idx])
+        except Exception as error:
+            logger.warning(f"market_research_hn_failed error={error} request_id={req_id}")
+            source_errors.append("hn_unavailable")
+        next_idx += 1
+
+    if app_store_fetcher and len(results) > next_idx:
+        try:
+            app_store_reviews = _result_or_raise(results[next_idx])
         except Exception as error:
             logger.warning(f"market_research_appstore_failed error={error} request_id={req_id}")
             source_errors.append("app_store_unavailable")

@@ -9,3 +9,4 @@ frontend/.next/
 frontend/.turbo/
 .vscode/
 .claude/
+venv/

@@ -1,4 +1,5 @@
 import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
 
 export type ResearchStep = {
   id: string;
@@ -6,6 +7,7 @@ export type ResearchStep = {
   label: string;
   detail?: string;
   status: "pending" | "active" | "done";
+  locked?: boolean;
 };
 
 type Props = {
@@ -13,8 +15,9 @@ type Props = {
 };
 
 export function DeepResearchProgress({ steps }: Props) {
-  const doneCount = steps.filter((s) => s.status === "done").length;
-  const progress = steps.length === 0 ? 0 : Math.round((doneCount / steps.length) * 100);
+  const activeSteps = steps.filter((s) => !s.locked);
+  const doneCount = activeSteps.filter((s) => s.status === "done").length;
+  const progress = activeSteps.length === 0 ? 0 : Math.round((doneCount / activeSteps.length) * 100);
 
   return (
     <motion.section
@@ -48,25 +51,35 @@ export function DeepResearchProgress({ steps }: Props) {
             animate={{ opacity: 1, x: 0 }}
             className={[
               "flex items-center gap-3 rounded-xl border px-4 py-3 transition",
-              step.status === "active"
+              step.locked
+                ? "border-zinc-800/30 bg-zinc-950/20"
+                : step.status === "active"
                 ? "border-emerald-500/30 bg-emerald-500/[0.08]"
                 : step.status === "done"
                 ? "border-zinc-800/60 bg-zinc-900/30"
                 : "border-zinc-800/40 bg-zinc-950/30",
             ].join(" ")}
           >
-            <span className="text-base leading-none">{step.icon}</span>
+            <span className={`text-base leading-none ${step.locked ? "grayscale opacity-30" : ""}`}>
+              {step.icon}
+            </span>
 
             <div className="min-w-0 flex-1">
               <p className={`text-sm font-medium ${
-                step.status === "active" ? "text-emerald-200"
-                : step.status === "done" ? "text-zinc-500"
+                step.locked       ? "text-zinc-700"
+                : step.status === "active" ? "text-emerald-200"
+                : step.status === "done"   ? "text-zinc-500"
                 : "text-zinc-700"
               }`}>
                 {step.label}
+                {step.locked && (
+                  <span className="ml-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-700">
+                    — Pro
+                  </span>
+                )}
               </p>
               <AnimatePresence>
-                {step.detail && (
+                {step.detail && !step.locked && (
                   <motion.p
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
@@ -79,7 +92,13 @@ export function DeepResearchProgress({ steps }: Props) {
             </div>
 
             <span className="ml-2 flex-shrink-0">
-              {step.status === "done" ? (
+              {step.locked ? (
+                <Link href="/pricing">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full border border-zinc-800 text-[10px] text-zinc-700 transition hover:border-emerald-500/40 hover:text-emerald-500">
+                    🔒
+                  </span>
+                </Link>
+              ) : step.status === "done" ? (
                 <motion.span
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}

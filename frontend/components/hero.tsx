@@ -8,6 +8,7 @@ import { GenerationErrorState } from "./generation-error-state";
 import { useLanguage } from "../contexts/language-context";
 import {
   ApiRequestError,
+  clearGuestToken,
   fetchCredits,
   generateIdeasStream,
   type IdeaGenerationResponse,
@@ -15,6 +16,7 @@ import {
   type SaaSIdea,
 } from "../lib/mcp";
 import { IdeaPanel } from "./idea-panel";
+import { GuestLimitModal } from "./guest-limit-modal";
 
 export function Hero() {
   const router = useRouter();
@@ -38,12 +40,14 @@ export function Hero() {
   // Yeni: Kaç fikir üretileceğini tutan state
   const [ideaCount, setIdeaCount] = useState(3);
   const [userPlan, setUserPlan] = useState("free");
+  const [showGuestModal, setShowGuestModal] = useState(false);
 
   useEffect(() => {
     const loadContext = async () => {
       try {
         const creditStatus = await fetchCredits();
         setUserPlan(creditStatus.plan);
+        if (creditStatus.plan === "free") setIdeaCount(1);
         if (creditStatus.credits_remaining <= 0) {
           router.push("/pricing");
         }
@@ -66,8 +70,17 @@ export function Hero() {
   };
 
   const onGenerate = async () => {
+    const isPro = userPlan === "pro" || userPlan === "enterprise";
     setIsGenerating(true);
-    setResearchSteps([]);
+    // Free kullanıcılara kilitli adımları baştan göster
+    setResearchSteps(
+      isPro
+        ? []
+        : [
+            { id: "hn_done",       icon: "🟧", label: "Hacker News analizi",   status: "pending", locked: true },
+            { id: "appstore_done", icon: "📱", label: "App Store incelemeleri", status: "pending", locked: true },
+          ]
+    );
     setIdeas([]);
     setEvidence({ ideas: [], market_evidence: [], trends: [], competitors: [] });
     setGenerateError(null);
@@ -76,6 +89,7 @@ export function Hero() {
       for await (const event of generateIdeasStream(topic.trim(), ideaCount)) {
         if (event.step === "error") {
           if (event.status === 402) { router.push("/pricing"); return; }
+          if (event.status === 403) { setShowGuestModal(true); return; }
           setGenerateError({ message: event.message });
           return;
         }
@@ -95,7 +109,10 @@ export function Hero() {
             return prev.map((s) => s.id === event.step ? { ...s, status: "done", detail: detail ?? s.detail } : s.status === "active" ? { ...s, status: "done" } : s);
           }
           const updated = prev.map((s) => s.status === "active" ? { ...s, status: "done" as const } : s);
-          return [...updated, { id: event.step, icon: meta.icon, label: meta.label, detail, status: "active" as const }];
+          // Kilitli adımların önüne ekle (kilitliler hep sonda kalsın)
+          const lockedSteps = updated.filter((s) => s.locked);
+          const activeSteps = updated.filter((s) => !s.locked);
+          return [...activeSteps, { id: event.step, icon: meta.icon, label: meta.label, detail, status: "active" as const }, ...lockedSteps];
         });
       }
     } catch (error) {
@@ -115,16 +132,18 @@ export function Hero() {
   };
 
   const item: Variants = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } },
+    hidden: { opacity: 0, y: 24, filter: "blur(4px)" },
+    show: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.6, ease: [0.22, 1, 0.36, 1] } },
   };
 
   return (
+    <>
     <motion.section
       variants={container}
       initial="hidden"
       animate="show"
       className="mx-auto flex w-full max-w-6xl flex-col px-4 pb-24 pt-14 sm:px-8 sm:pt-20"
+      style={{ willChange: "opacity" }}
     >
       {/* Badge */}
       <motion.div variants={item} className="flex">
@@ -201,7 +220,7 @@ export function Hero() {
       {/* Input card */}
       <motion.div
         variants={item}
-        className="mt-10 overflow-hidden rounded-2xl border border-white/[0.08] bg-black/50 shadow-2xl shadow-black/50 backdrop-blur-xl"
+        className="mt-10 overflow-hidden rounded-2xl border border-white/[0.09] bg-black/55 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.8),inset_0_1px_0_rgb(255_255_255/0.06)] backdrop-blur-xl transition-shadow duration-500 hover:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.9),0_0_0_1px_rgb(52_211_153/0.08)]"
       >
         {/* Window chrome */}
         <div className="flex items-center gap-1.5 border-b border-white/[0.06] px-5 py-3">
@@ -233,7 +252,7 @@ export function Hero() {
               <button
                 key={tag}
                 onClick={() => setTopic(tag)}
-                className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3 py-1 text-xs text-zinc-500 transition hover:border-emerald-500/40 hover:text-emerald-300"
+                className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3 py-1 text-xs text-zinc-500 transition-all duration-200 hover:border-emerald-500/40 hover:bg-emerald-500/[0.06] hover:text-emerald-300 active:scale-95"
               >
                 {tag}
               </button>
@@ -245,21 +264,29 @@ export function Hero() {
             <div className="flex items-center gap-2">
               <span className="text-xs text-zinc-600 font-medium select-none">Fikir sayısı</span>
               <div className="flex items-center rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
-                {[1, 2, 3].map((n) => (
+                {[1, 2, 3].map((n) => {
+                  const isPro = userPlan === "pro" || userPlan === "enterprise";
+                  const locked = !isPro && n > 1;
+                  return (
                   <button
                     key={n}
                     type="button"
-                    onClick={() => setIdeaCount(n)}
-                    disabled={isGenerating}
-                    className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all duration-150 focus:outline-none disabled:cursor-not-allowed
-                      ${ideaCount === n
-                        ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-inset ring-emerald-500/25"
-                        : "text-zinc-500 hover:text-zinc-300"}`}
+                    onClick={() => !locked && setIdeaCount(n)}
+                    disabled={isGenerating || locked}
+                    title={locked ? "Pro plana geç" : undefined}
+                    className={`px-3.5 py-1.5 rounded-md text-xs font-semibold transition-all duration-150 focus:outline-none
+                      ${locked
+                        ? "cursor-not-allowed text-zinc-700"
+                        : ideaCount === n
+                          ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-inset ring-emerald-500/25"
+                          : "text-zinc-500 hover:text-zinc-300"}
+                      ${isGenerating ? "cursor-not-allowed" : ""}`}
                     aria-label={`${n} fikir üret`}
                   >
-                    {n}
+                    {locked ? "🔒" : n}
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </div>
             <motion.button
@@ -267,7 +294,7 @@ export function Hero() {
               disabled={isGenerating}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.97 }}
-              className="relative overflow-hidden rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-6 py-2.5 text-sm font-semibold text-black shadow-lg shadow-emerald-500/25 transition disabled:cursor-not-allowed disabled:opacity-60"
+              className="relative overflow-hidden rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-6 py-2.5 text-sm font-semibold text-black shadow-lg shadow-emerald-500/30 transition hover:shadow-emerald-500/50 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <span className="relative z-10 flex items-center gap-2">
                 {isGenerating ? (
@@ -315,5 +342,14 @@ export function Hero() {
       ) : null}
 
     </motion.section>
+
+    <GuestLimitModal
+      open={showGuestModal}
+      onClose={() => {
+        setShowGuestModal(false);
+        clearGuestToken();
+      }}
+    />
+    </>
   );
 }

@@ -68,18 +68,12 @@ export function Navbar() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-        className="mx-auto flex w-full max-w-6xl items-center justify-between rounded-2xl border border-white/[0.07] bg-black/50 px-5 py-3 shadow-[0_8px_32px_-8px_rgba(0,0,0,0.9)] backdrop-blur-2xl"
+        className="mx-auto flex w-full max-w-6xl items-center justify-between rounded-2xl border border-white/[0.09] bg-black/60 px-5 py-3 shadow-[0_8px_40px_-8px_rgba(0,0,0,0.95),inset_0_1px_0_rgb(255_255_255/0.05)] backdrop-blur-2xl"
       >
         {/* Logo */}
-        <Link href="/" className="group flex items-center gap-2.5">
-          <span className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 text-sm font-bold text-black shadow-lg shadow-emerald-500/30 transition group-hover:shadow-emerald-500/50">
-            <span className="absolute inset-0 rounded-xl bg-white/20 opacity-0 transition group-hover:opacity-100" />
-            G
-          </span>
-          <div className="flex flex-col leading-none">
-            <span className="text-sm font-bold tracking-tight text-white">GroLab</span>
-            <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-emerald-400/70">AI Research</span>
-          </div>
+        <Link href="/" className="group flex flex-col leading-none">
+          <span className="text-sm font-bold tracking-tight text-white transition group-hover:text-zinc-200">GroLab</span>
+          <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-emerald-400/70 transition group-hover:text-emerald-400">AI Research</span>
         </Link>
 
         {/* Desktop nav links */}
@@ -90,18 +84,31 @@ export function Navbar() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`relative rounded-xl px-3.5 py-2 text-[13px] font-medium transition-all duration-200 ${
-                  isActive ? "text-white" : "text-zinc-500 hover:text-zinc-200"
-                }`}
+                className="relative px-3.5 py-2 text-[13px] font-medium"
               >
-                {isActive && (
-                  <motion.span
-                    layoutId="nav-active"
-                    className="absolute inset-0 rounded-xl bg-white/[0.08]"
-                    transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
-                  />
-                )}
-                <span className="relative">{link.label}</span>
+                <motion.span
+                  animate={{
+                    color: isActive ? "#ffffff" : "#71717a",
+                    textShadow: isActive ? "0 0 20px rgb(52 211 153 / 0.5)" : "none",
+                  }}
+                  whileHover={{ color: "#e4e4e7" }}
+                  transition={{ duration: 0.25 }}
+                  className="relative block"
+                >
+                  {link.label}
+                </motion.span>
+
+                {/* Underline that grows from center */}
+                <motion.span
+                  className="absolute bottom-0.5 left-1/2 block h-px rounded-full bg-gradient-to-r from-emerald-400 to-teal-400"
+                  initial={false}
+                  animate={{
+                    width: isActive ? "60%" : "0%",
+                    x: "-50%",
+                    opacity: isActive ? 1 : 0,
+                  }}
+                  transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                />
               </Link>
             );
           })}
@@ -148,6 +155,14 @@ export function Navbar() {
           {/* Auth area */}
           {user ? (
             <div className="hidden items-center gap-2 sm:flex">
+              {credits?.plan === "free" && (
+                <Link
+                  href="/pricing"
+                  className="relative overflow-hidden rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2 text-[13px] font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:brightness-110 hover:shadow-emerald-500/40"
+                >
+                  <span className="relative z-10">{t.nav.upgrade}</span>
+                </Link>
+              )}
               <Link
                 href="/dashboard"
                 className={`rounded-xl border px-3 py-2 text-[12px] font-medium transition ${
@@ -180,12 +195,6 @@ export function Navbar() {
                 className="hidden rounded-xl border border-white/[0.07] bg-white/[0.03] px-4 py-2 text-[13px] font-medium text-zinc-400 transition hover:border-white/[0.12] hover:bg-white/[0.07] hover:text-white sm:block"
               >
                 {t.nav.signIn}
-              </Link>
-              <Link
-                href="/pricing"
-                className="relative overflow-hidden rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2 text-[13px] font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:brightness-110 hover:shadow-emerald-500/40"
-              >
-                <span className="relative z-10">{t.nav.upgrade}</span>
               </Link>
             </>
           )}

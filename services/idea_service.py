@@ -36,9 +36,9 @@ class IdeaGenerationResult(BaseModel):
 
 
 LLMProvider = Literal["openai", "anthropic"]
-LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
-MARKET_RESEARCH_TIMEOUT_SECONDS = float(os.getenv("MARKET_RESEARCH_TIMEOUT_SECONDS", "20"))
-LLM_STAGE_TIMEOUT_SECONDS = float(os.getenv("LLM_STAGE_TIMEOUT_SECONDS", "35"))
+LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "90"))
+MARKET_RESEARCH_TIMEOUT_SECONDS = float(os.getenv("MARKET_RESEARCH_TIMEOUT_SECONDS", "30"))
+LLM_STAGE_TIMEOUT_SECONDS = float(os.getenv("LLM_STAGE_TIMEOUT_SECONDS", "90"))
 ALLOW_FALLBACK_IDEAS = os.getenv("ALLOW_FALLBACK_IDEAS", "0") == "1"
 
 logger = logging.getLogger("grolab.idea_service")
@@ -85,26 +85,26 @@ def _build_user_prompt(topic: str, market_context: MarketContext) -> str:
 
     product_hunt_briefs = [
         f"- {item.name}: {item.tagline} (votes={item.votes_count})"
-        for item in market_context.product_hunt_products[:5]
+        for item in market_context.product_hunt_products[:12]
         if not _is_social(item.name + " " + item.tagline)
     ]
     reddit_briefs = [
         f"- r/{item.subreddit}: {item.title} (score={item.score})"
-        for item in market_context.reddit_needs[:5]
+        for item in market_context.reddit_needs[:10]
         if not _is_social(item.title)
     ]
     trend_briefs = [
         f"- {item.keyword} (trend={item.value})"
-        for item in market_context.trend_keywords[:5]
+        for item in market_context.trend_keywords[:12]
         if not _is_social(item.keyword)
     ]
     app_store_briefs = [
         f"- [{item.app_name} ★{item.rating}]: {item.review[:150]}"
-        for item in getattr(market_context, "app_store_reviews", [])[:5]
+        for item in getattr(market_context, "app_store_reviews", [])[:10]
     ]
     hn_briefs = [
         f"- {item.title} (score={item.score}, comments={item.comments})"
-        for item in getattr(market_context, "hn_posts", [])[:5]
+        for item in getattr(market_context, "hn_posts", [])[:10]
     ]
 
     product_hunt_text = "\n".join(product_hunt_briefs) or "- no_data"
@@ -162,7 +162,9 @@ def _build_user_prompt(topic: str, market_context: MarketContext) -> str:
     )
 
 
-def _derive_market_evidence(market_context: MarketContext) -> tuple[list[str], list[str], list[str]]:
+def _derive_market_evidence(market_context: MarketContext, plan: str = "free") -> tuple[list[str], list[str], list[str]]:
+    is_pro = plan in ("pro", "enterprise")
+
     trends = [
         f"Google Trends: {item.keyword} ({item.value})"
         for item in market_context.trend_keywords[:5]
@@ -187,17 +189,18 @@ def _derive_market_evidence(market_context: MarketContext) -> tuple[list[str], l
             f"Reddit'te {len(market_context.reddit_needs)} problem/need sinyali yakalandi"
         )
 
-    hn_posts = getattr(market_context, "hn_posts", [])
-    if hn_posts:
-        market_evidence.append(
-            f"Hacker News'te {len(hn_posts)} ilgili tartisma tespit edildi"
-        )
+    if is_pro:
+        hn_posts = getattr(market_context, "hn_posts", [])
+        if hn_posts:
+            market_evidence.append(
+                f"Hacker News'te {len(hn_posts)} ilgili tartisma tespit edildi"
+            )
 
-    app_store_reviews = getattr(market_context, "app_store_reviews", [])
-    if app_store_reviews:
-        market_evidence.append(
-            f"App Store'da {len(app_store_reviews)} dusuk puanli sikayet analiz edildi"
-        )
+        app_store_reviews = getattr(market_context, "app_store_reviews", [])
+        if app_store_reviews:
+            market_evidence.append(
+                f"App Store'da {len(app_store_reviews)} dusuk puanli sikayet analiz edildi"
+            )
 
     return market_evidence[:6], trends[:6], competitors[:6]
 
@@ -244,7 +247,7 @@ async def _post_with_retry(
     payload: dict,
     req_logger: logging.Logger,
 ) -> httpx.Response:
-    async with httpx.AsyncClient(timeout=LLM_TIMEOUT_SECONDS) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=90, write=10, pool=5)) as client:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(1),
             retry=retry_if_exception(_should_retry),
@@ -395,12 +398,15 @@ async def generate_saas_ideas(
     request_id: str,
     idea_count: int = 3,
     on_progress: Optional[ProgressCallback] = None,
+    plan: str = "free",
 ) -> IdeaGenerationResult:
     provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
     req_logger = logger
+    is_pro = plan in ("pro", "enterprise")
 
-    # En fazla 3 fikir iste
-    idea_count = max(1, min(idea_count, 3))
+    # Plan kısıtlaması: free → max 1 fikir
+    max_ideas = 3 if is_pro else 1
+    idea_count = max(1, min(idea_count, max_ideas))
 
     raw_topic = topic.strip()
     is_random = not raw_topic
@@ -421,7 +427,7 @@ async def generate_saas_ideas(
             await on_progress("research_start", "Pazar araştırması başlıyor...", 0)
         try:
             market_context = await asyncio.wait_for(
-                research_market(effective_topic, request_id, on_progress=on_progress),
+                research_market(effective_topic, request_id, on_progress=on_progress, plan=plan),
                 timeout=MARKET_RESEARCH_TIMEOUT_SECONDS,
             )
         except Exception as error:
@@ -431,19 +437,14 @@ async def generate_saas_ideas(
             market_context.source_errors.append("market_context_timeout_or_error")
 
     if on_progress:
-        await on_progress("llm_start", "Fırsat skoru hesaplanıyor...", 0)
+        label = "Fırsat skoru hesaplanıyor..." if is_pro else "Fikirler oluşturuluyor..."
+        await on_progress("llm_start", label, 0)
 
     try:
         if provider == "anthropic":
-            response = await asyncio.wait_for(
-                _call_anthropic(effective_topic, market_context, req_logger, idea_count=idea_count),
-                timeout=min(LLM_TIMEOUT_SECONDS, LLM_STAGE_TIMEOUT_SECONDS),
-            )
+            response = await _call_anthropic(effective_topic, market_context, req_logger, idea_count=idea_count)
         else:
-            response = await asyncio.wait_for(
-                _call_openai(effective_topic, market_context, req_logger, idea_count=idea_count),
-                timeout=min(LLM_TIMEOUT_SECONDS, LLM_STAGE_TIMEOUT_SECONDS),
-            )
+            response = await _call_openai(effective_topic, market_context, req_logger, idea_count=idea_count)
     except (asyncio.TimeoutError, httpx.HTTPError, json.JSONDecodeError, ValidationError, RuntimeError) as error:
         if ALLOW_FALLBACK_IDEAS:
             req_logger.warning(
@@ -468,7 +469,7 @@ async def generate_saas_ideas(
             raise RuntimeError("Unexpected error while generating ideas") from error
 
     # Sadece istenen kadar fikir döndür
-    market_evidence, trends, competitors = _derive_market_evidence(market_context)
+    market_evidence, trends, competitors = _derive_market_evidence(market_context, plan=plan)
     logger.info(
         f"idea_generation_completed ideas={len(response.ideas)} request_id={request_id}"
     )

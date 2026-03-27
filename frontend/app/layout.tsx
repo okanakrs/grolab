@@ -13,6 +13,12 @@ export const metadata: Metadata = {
   title: "GroLab — AI-Powered SaaS Idea Generator",
   description:
     "Generate validated SaaS ideas in seconds using real-time data from Google Trends, Product Hunt, and Reddit — powered by Claude AI.",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+    ],
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

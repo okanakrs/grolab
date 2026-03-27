@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from services.billing_service import consume_credit, get_credit_snapshot
+from services.guest_service import guest_can_generate, increment_guest_count
 from services.idea_service import IdeaGenerationResult, generate_saas_ideas
 
 router = APIRouter(tags=["ideas"])
@@ -90,16 +91,31 @@ async def stream_ideas(
     topic: str = Query(default=""),
     idea_count: int = Query(default=3, ge=1, le=3),
     x_user_id: Optional[str] = Header(default=None),
+    x_guest_token: Optional[str] = Header(default=None),
 ) -> StreamingResponse:
     user_id = _get_user_id(x_user_id)
     request_id = str(uuid4())
     idea_count = max(1, min(idea_count, 3))
+    is_guest = user_id == "demo-user" and bool(x_guest_token)
 
-    snapshot = await get_credit_snapshot(user_id)
-    if snapshot.credits_remaining < idea_count:
-        async def _error():
-            yield f"data: {json.dumps({'step': 'error', 'message': 'Insufficient credits', 'status': 402})}\n\n"
-        return StreamingResponse(_error(), media_type="text/event-stream")
+    async def _guest_limit_error():
+        yield f"data: {json.dumps({'step': 'error', 'message': 'Guest limit reached', 'status': 403})}\n\n"
+
+    if is_guest:
+        # Guest: 1 üretim hakkı, sadece 1 fikir, sadece 3 kaynak
+        if not await guest_can_generate(x_guest_token):
+            return StreamingResponse(_guest_limit_error(), media_type="text/event-stream")
+        idea_count = 1
+        plan = "free"
+    else:
+        snapshot = await get_credit_snapshot(user_id)
+        if snapshot.credits_remaining <= 0:
+            async def _credit_error():
+                yield f"data: {json.dumps({'step': 'error', 'message': 'Insufficient credits', 'status': 402})}\n\n"
+            return StreamingResponse(_credit_error(), media_type="text/event-stream")
+        plan = snapshot.plan
+        if plan not in ("pro", "enterprise"):
+            idea_count = 1
 
     queue: asyncio.Queue = asyncio.Queue()
 
@@ -113,10 +129,14 @@ async def stream_ideas(
                 request_id,
                 idea_count,
                 on_progress=_on_progress,
+                plan=plan,
             )
-            await consume_credit(user_id, amount=idea_count)
-            if user_id != "demo-user":
-                await _save_ideas(user_id, topic, result)
+            if is_guest:
+                await increment_guest_count(x_guest_token)
+            else:
+                await consume_credit(user_id, amount=idea_count)
+                if user_id != "demo-user":
+                    await _save_ideas(user_id, topic, result)
             await queue.put({"step": "done", **result.model_dump()})
         except Exception as error:
             logger.exception(f"stream_ideas_failed user_id={user_id}")
