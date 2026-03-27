@@ -1,70 +1,44 @@
-# GroLab
+# GroLab — AI-Powered SaaS Idea Generator
 
-GroLab is an AI-assisted SaaS idea generation starter kit.
+Gerçek zamanlı pazar verilerini analiz ederek uygulanabilir SaaS fikirleri üreten bir platform.
 
-## Stack
+## Özellikler
 
-- Backend: FastAPI
-- Frontend: Next.js + Tailwind CSS + Framer Motion
-- Billing: Stripe checkout + webhook-based credit refill
-- Research signals: Product Hunt (Algolia), Reddit, Google Trends (SerpApi)
+- **5 Canlı Veri Kaynağı** — Product Hunt, Reddit, Google Trends, Hacker News, App Store
+- **SSE Streaming** — Araştırma adımları canlı olarak ekrana yansır
+- **Claude Sonnet** — Anthropic veya OpenAI ile fikir üretimi
+- **Fikir Geçmişi** — Üretilen fikirler Supabase'e kaydedilir, dashboard'dan erişilebilir
+- **Premium Araçlar** — Pazarlama stratejisi, teknik altyapı, rakip analizi, 3 aylık yol haritası
+- **Kredi Sistemi** — Free (10 kredi) / Pro (100 kredi) planları
+- **Stripe Entegrasyonu** — Ödeme ve plan yönetimi
+- **Auth** — Supabase email/password + Google + GitHub OAuth
 
-## Features
+## Teknoloji
 
-- Deep research style multi-step idea generation UI
-- Market evidence badges (trends, competitors, evidence)
-- Credit guard before generation requests
-- Stripe subscription checkout endpoints
-- Request tracking with `X-Request-ID`
+| Katman | Teknoloji |
+|---|---|
+| Frontend | Next.js 14, Tailwind CSS, Framer Motion |
+| Backend | FastAPI, Python 3.9+ |
+| Veritabanı | Supabase (PostgreSQL) |
+| AI | Anthropic Claude Sonnet / OpenAI GPT-4o |
+| Araştırma | SerpAPI (Google Trends), Algolia (Product Hunt), Reddit API, HN Algolia |
+| Ödeme | Stripe |
 
-## Project Structure
+## Kurulum
 
-- `main.py`: FastAPI app setup and middleware
-- `routers/`: API routes (`discovery.py`, `billing.py`)
-- `services/`: business logic and integrations
-- `frontend/`: Next.js app
+### Gereksinimler
 
-## Environment Variables
-
-Create a `.env` file in repository root:
-
-```env
-LLM_PROVIDER=anthropic
-LLM_TIMEOUT_SECONDS=30
-
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-4o
-
-ANTHROPIC_API_KEY=
-ANTHROPIC_MODEL=claude-sonnet-4-6
-
-PH_ALGOLIA_APP_ID=
-PH_ALGOLIA_API_KEY=
-PH_ALGOLIA_INDEX=Post_production
-
-REDDIT_CLIENT_ID=
-REDDIT_CLIENT_SECRET=
-REDDIT_USER_AGENT=grolab-research-bot/0.1
-REDDIT_SUBREDDITS=startups,Entrepreneur,SaaS
-
-SERPAPI_API_KEY=
-
-NEXT_PUBLIC_BACKEND_URL=http://127.0.0.1:8000
-
-STRIPE_SECRET_KEY=
-STRIPE_WEBHOOK_SECRET=
-STRIPE_PRICE_PRO=
-STRIPE_PRICE_ENTERPRISE=
-FRONTEND_BASE_URL=http://127.0.0.1:3000
-```
-
-## Local Run
+- Python 3.9+
+- Node.js 18+
+- Supabase hesabı
+- Anthropic veya OpenAI API key
 
 ### Backend
 
 ```bash
-python -m pip install -r requirements.txt
-python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+pip install -r requirements.txt
+cp .env.example .env
+python main.py
 ```
 
 ### Frontend
@@ -75,19 +49,50 @@ npm install
 npm run dev
 ```
 
-## Billing Endpoints
+## Ortam Değişkenleri
 
-- `POST /api/checkout`
-- `POST /api/webhook`
-- `GET /api/credits`
+### Backend `.env`
 
-## CI
+```env
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=...
+OPENAI_API_KEY=...
+SERPAPI_API_KEY=...
+PH_ALGOLIA_APP_ID=...
+PH_ALGOLIA_API_KEY=...
+REDDIT_SUBREDDITS=startups,Entrepreneur,SaaS
+APIFY_API_KEY=...
+SUPABASE_URL=...
+SUPABASE_SERVICE_KEY=...
+STRIPE_SECRET_KEY=...
+STRIPE_WEBHOOK_SECRET=...
+STRIPE_PRO_PRICE_ID=...
+```
 
-GitHub Actions workflow runs:
+### Frontend `frontend/.env.local`
 
-- Python compile checks for backend
-- Frontend build check
+```env
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+NEXT_PUBLIC_BACKEND_URL=http://127.0.0.1:8000
+```
 
-## Versioning
+## Veritabanı
 
-Initial release tag: `v0.1.0`
+Supabase SQL Editor'da `supabase_setup.sql` dosyasını çalıştır.
+
+## API Endpoints
+
+| Method | Path | Açıklama |
+|---|---|---|
+| `GET` | `/api/ideas/stream` | SSE ile canlı fikir üretimi |
+| `POST` | `/api/ideas/generate` | Standart fikir üretimi |
+| `GET` | `/api/ideas/history` | Kullanıcının fikir geçmişi |
+| `GET` | `/api/credits` | Kredi durumu |
+| `POST` | `/api/tools/analyze` | Premium araç analizi |
+| `POST` | `/api/checkout` | Stripe checkout başlat |
+| `GET` | `/health` | Sağlık kontrolü |
+
+---
+
+© 2026 GroLab. Tüm hakları saklıdır.
