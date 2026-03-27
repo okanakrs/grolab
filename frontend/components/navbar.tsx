@@ -1,6 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
+import { BookMarked, Crown, LogOut, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -137,55 +138,60 @@ export function Navbar() {
             </button>
           </div>
 
-          {/* Credit badge */}
+          {/* Credit indicator */}
           {credits && (
-            <div className="hidden items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/[0.08] px-3 py-1.5 sm:flex">
-              <span className="relative flex h-1.5 w-1.5 flex-shrink-0">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              </span>
-              <span className="text-[11px] font-semibold tabular-nums text-emerald-300">
+            <div className="hidden items-center gap-1.5 sm:flex">
+              <Zap size={12} className="text-teal-400" strokeWidth={2} />
+              <span className="text-[12px] font-semibold tabular-nums text-teal-300">
                 {credits.credits_remaining}
-                <span className="text-emerald-500/70">/{credits.credits_total}</span>
               </span>
-              <span className="text-[11px] text-emerald-500/60">{t.nav.credits}</span>
+              <span className="text-[12px] text-zinc-600">/{credits.credits_total}</span>
+              {credits.plan === "free" && (
+                <div className="group relative ml-0.5">
+                  <Link href="/pricing" className="flex items-center text-amber-400 transition hover:text-amber-300">
+                    <Crown size={16} strokeWidth={1.75} />
+                  </Link>
+                  <span className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/[0.08] bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-zinc-300 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+                    {t.nav.upgrade}
+                  </span>
+                </div>
+              )}
             </div>
           )}
 
           {/* Auth area */}
           {user ? (
             <div className="hidden items-center gap-2 sm:flex">
-              {credits?.plan === "free" && (
+              {/* Upgrade button removed — Crown icon used instead */}
+              {/* Dashboard icon link with tooltip */}
+              <div className="group relative">
                 <Link
-                  href="/pricing"
-                  className="relative overflow-hidden rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2 text-[13px] font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:brightness-110 hover:shadow-emerald-500/40"
+                  href="/dashboard"
+                  className={`flex h-8 w-8 items-center justify-center rounded-xl border transition ${
+                    pathname === "/dashboard"
+                      ? "border-emerald-500/30 bg-emerald-500/[0.08] text-emerald-300"
+                      : "border-white/[0.07] bg-white/[0.03] text-zinc-500 hover:border-white/[0.12] hover:text-zinc-300"
+                  }`}
                 >
-                  <span className="relative z-10">{t.nav.upgrade}</span>
+                  <BookMarked size={15} strokeWidth={1.75} />
                 </Link>
-              )}
-              <Link
-                href="/dashboard"
-                className={`rounded-xl border px-3 py-2 text-[12px] font-medium transition ${
-                  pathname === "/dashboard"
-                    ? "border-emerald-500/30 bg-emerald-500/[0.08] text-emerald-300"
-                    : "border-white/[0.07] bg-white/[0.03] text-zinc-500 hover:border-white/[0.12] hover:text-zinc-300"
-                }`}
-              >
-                Fikirlerim
-              </Link>
-              <div className="flex items-center gap-2 rounded-xl border border-white/[0.07] bg-white/[0.03] px-3 py-1.5">
-                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-[10px] font-bold text-black">
-                  {(userDisplayName?.[0] ?? "U").toUpperCase()}
-                </span>
-                <span className="max-w-[100px] truncate text-[12px] font-medium text-zinc-300">
-                  {userDisplayName}
+                <span className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 whitespace-nowrap rounded-lg border border-white/[0.08] bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-zinc-300 opacity-0 shadow-lg transition-opacity duration-150 group-hover:opacity-100">
+                  {t.nav.myIdeas}
                 </span>
               </div>
+
+              {/* Avatar */}
+              <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border border-teal-500/40 bg-zinc-900 text-[11px] font-bold text-teal-300">
+                {(userDisplayName?.[0] ?? "U").toUpperCase()}
+              </div>
+
+              {/* Sign out */}
               <button
                 onClick={() => void onSignOut()}
-                className="rounded-xl border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-[12px] font-medium text-zinc-500 transition hover:border-white/[0.12] hover:text-zinc-300"
+                className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.03] text-zinc-500 transition hover:border-red-500/30 hover:bg-red-500/[0.08] hover:text-red-400"
+                title={t.nav.signOut}
               >
-                {t.nav.signOut}
+                <LogOut size={15} strokeWidth={1.75} />
               </button>
             </div>
           ) : (

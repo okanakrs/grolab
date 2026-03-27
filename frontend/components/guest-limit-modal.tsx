@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
+import { useLanguage } from "../contexts/language-context";
 
 type Props = {
   open: boolean;
@@ -9,6 +10,9 @@ type Props = {
 };
 
 export function GuestLimitModal({ open, onClose }: Props) {
+  const { t } = useLanguage();
+  const tm = t.guestModal;
+
   return (
     <AnimatePresence>
       {open && (
@@ -42,12 +46,13 @@ export function GuestLimitModal({ open, onClose }: Props) {
               </div>
 
               <h2 className="text-center text-xl font-bold text-white">
-                Ücretsiz hakkın doldu
+                {tm.title}
               </h2>
               <p className="mt-2 text-center text-sm leading-relaxed text-zinc-500">
-                Misafir olarak 1 fikir üretme hakkın var. Devam etmek için{" "}
-                <strong className="text-zinc-300">ücretsiz hesap oluştur</strong> —
-                kayıt olunca <span className="text-emerald-400">10 kredi</span> hediye.
+                {tm.body1}{" "}
+                <strong className="text-zinc-300">{tm.body2}</strong>{" "}
+                {tm.body3} <span className="text-emerald-400">{tm.body4}</span>{" "}
+                {tm.body5}
               </p>
 
               <div className="mt-6 flex flex-col gap-3">
@@ -56,7 +61,7 @@ export function GuestLimitModal({ open, onClose }: Props) {
                   onClick={onClose}
                   className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-5 py-3 text-sm font-semibold text-black shadow-lg shadow-emerald-500/25 transition hover:brightness-110"
                 >
-                  <span>Ücretsiz Hesap Oluştur</span>
+                  <span>{tm.signUp}</span>
                   <span className="text-xs opacity-80">→</span>
                 </Link>
                 <Link
@@ -64,13 +69,13 @@ export function GuestLimitModal({ open, onClose }: Props) {
                   onClick={onClose}
                   className="flex items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] px-5 py-2.5 text-sm font-medium text-zinc-400 transition hover:border-white/[0.12] hover:text-zinc-200"
                 >
-                  Zaten hesabım var — Giriş yap
+                  {tm.signIn}
                 </Link>
                 <button
                   onClick={onClose}
                   className="text-xs text-zinc-700 transition hover:text-zinc-500"
                 >
-                  Şimdi değil
+                  {tm.notNow}
                 </button>
               </div>
             </div>

@@ -1,9 +1,18 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
+import { Code2, Map, Megaphone, Swords } from "lucide-react";
 import { useRouter } from "next/navigation";
 import React, { useState } from "react";
 import { analyzeIdea, type SaaSIdea, type ToolType } from "../lib/mcp";
+import { useLanguage } from "../contexts/language-context";
+
+const TOOL_ICONS: Record<string, React.ReactNode> = {
+  marketing:  <Megaphone size={16} strokeWidth={1.75} />,
+  tech_stack: <Code2    size={16} strokeWidth={1.75} />,
+  competitor: <Swords   size={16} strokeWidth={1.75} />,
+  roadmap:    <Map      size={16} strokeWidth={1.75} />,
+};
 
 function MarkdownContent({ content }: { content: string }) {
   const lines = content.split("\n");
@@ -42,12 +51,6 @@ function MarkdownContent({ content }: { content: string }) {
   return <>{elements}</>;
 }
 
-const TOOLS: { id: ToolType; label: string; icon: string }[] = [
-  { id: "marketing",  label: "Pazarlama Stratejisi",  icon: "📣" },
-  { id: "tech_stack", label: "Teknik Altyapı",         icon: "⚙️" },
-  { id: "competitor", label: "Rakip Analizi",           icon: "🔍" },
-  { id: "roadmap",    label: "3 Aylık Yol Haritası",   icon: "🗺️" },
-];
 
 interface PremiumToolboxProps {
   idea: SaaSIdea;
@@ -57,6 +60,8 @@ interface PremiumToolboxProps {
 export function PremiumToolbox({ idea, plan }: PremiumToolboxProps) {
   const isPro = plan === "pro" || plan === "enterprise";
   const router = useRouter();
+  const { t } = useLanguage();
+  const TOOLS = t.toolbox.tools;
   const [activeResult, setActiveResult] = useState<{ tool: ToolType; content: string } | null>(null);
   const [loadingTool, setLoadingTool] = useState<ToolType | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +85,7 @@ export function PremiumToolbox({ idea, plan }: PremiumToolboxProps) {
       const result = await analyzeIdea(idea, tool);
       setActiveResult({ tool, content: result });
     } catch {
-      setError("Analiz sırasında bir hata oluştu. Tekrar deneyin.");
+      setError(t.toolbox.error);
     } finally {
       setLoadingTool(null);
     }
@@ -111,7 +116,7 @@ export function PremiumToolbox({ idea, plan }: PremiumToolboxProps) {
               {isLoading ? (
                 <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-zinc-500 border-t-zinc-200" />
               ) : (
-                <span className="text-base leading-none">{tool.icon}</span>
+                TOOL_ICONS[tool.id]
               )}
               <span>{tool.label}</span>
             </button>
@@ -131,7 +136,7 @@ export function PremiumToolbox({ idea, plan }: PremiumToolboxProps) {
             className="mt-3 rounded-xl border border-white/[0.07] bg-zinc-950/60 p-5"
           >
             <div className="mb-3 flex items-center gap-2">
-              <span className="text-sm">{activeToolMeta?.icon}</span>
+              <span className="text-zinc-500">{activeToolMeta ? TOOL_ICONS[activeToolMeta.id] : null}</span>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
                 {activeToolMeta?.label}
               </p>

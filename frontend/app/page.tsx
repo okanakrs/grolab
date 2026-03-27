@@ -1,9 +1,19 @@
 "use client";
 
 import { motion, type Variants } from "framer-motion";
+import { Activity, Plug2, Sparkles, TrendingUp } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Navbar } from "../components/navbar";
 import { Hero } from "../components/hero";
 import { useLanguage } from "../contexts/language-context";
+import { createClient } from "../lib/supabase";
+
+const FEATURE_ICONS = [
+  <Activity   key="activity"   size={28} color="#00C896" strokeWidth={1.75} />,
+  <Sparkles   key="sparkles"   size={28} color="#00C896" strokeWidth={1.75} />,
+  <Plug2      key="plug2"      size={28} color="#00C896" strokeWidth={1.75} />,
+  <TrendingUp key="trendingup" size={28} color="#00C896" strokeWidth={1.75} />,
+];
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 28 },
@@ -17,6 +27,15 @@ const fadeUp: Variants = {
 export default function HomePage() {
   const { t } = useLanguage();
   const tf = t.features;
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event: string, session: { user: unknown } | null) => {
+      setIsLoggedIn(!!session?.user);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
@@ -67,31 +86,33 @@ export default function HomePage() {
               <div className="pointer-events-none absolute inset-0 rounded-2xl opacity-0 transition-opacity duration-500 group-hover:opacity-100"
                 style={{ background: "radial-gradient(circle at 50% 0%, rgb(52 211 153 / 0.06), transparent 70%)" }}
               />
-              <span className="text-2xl leading-none">{feature.icon}</span>
+              <span className="flex-shrink-0">{FEATURE_ICONS[i]}</span>
               <h3 className="mt-4 text-sm font-semibold text-white">{feature.title}</h3>
               <p className="mt-2 text-xs leading-relaxed text-zinc-600">{feature.description}</p>
             </motion.div>
           ))}
         </div>
 
-        <motion.div
-          className="mt-12 flex flex-col items-center gap-4 rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.03] to-transparent p-8 text-center"
-          initial={{ opacity: 0, y: 24 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-60px" }}
-          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        >
-          <p className="text-lg font-semibold text-white">{tf.cta.title}</p>
-          <p className="max-w-sm text-sm text-zinc-500">{tf.cta.subtitle}</p>
-          <motion.a
-            href="#idea-topic"
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.97 }}
-            className="mt-1 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-6 py-2.5 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:brightness-110"
+        {!isLoggedIn && (
+          <motion.div
+            className="mt-12 flex flex-col items-center gap-4 rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.03] to-transparent p-8 text-center"
+            initial={{ opacity: 0, y: 24 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-60px" }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           >
-            {tf.cta.btn}
-          </motion.a>
-        </motion.div>
+            <p className="text-lg font-semibold text-white">{tf.cta.title}</p>
+            <p className="max-w-sm text-sm text-zinc-500">{tf.cta.subtitle}</p>
+            <motion.a
+              href="#idea-topic"
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              className="mt-1 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-6 py-2.5 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:brightness-110"
+            >
+              {tf.cta.btn}
+            </motion.a>
+          </motion.div>
+        )}
       </section>
     </main>
   );

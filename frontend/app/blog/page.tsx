@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Navbar } from "../../components/navbar";
 import { useLanguage } from "../../contexts/language-context";
+import { createClient } from "../../lib/supabase";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Rehber: "border-emerald-500/25 bg-emerald-500/10 text-emerald-400",
@@ -25,6 +27,15 @@ export default function BlogPage() {
   const { t } = useLanguage();
   const tb = t.blog;
   const { featuredPost, posts } = tb;
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event: string, session: { user: unknown } | null) => {
+      setIsLoggedIn(!!session?.user);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
@@ -146,7 +157,7 @@ export default function BlogPage() {
         </div>
 
         {/* CTA */}
-        <div className="mt-14 rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.03] to-transparent p-8 text-center">
+        {!isLoggedIn && <div className="mt-14 rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.03] to-transparent p-8 text-center">
           <h2 className="text-xl font-bold text-white">{tb.ctaTitle}</h2>
           <p className="mt-2 text-sm text-zinc-500">{tb.ctaSubtitle}</p>
           <Link
@@ -155,7 +166,7 @@ export default function BlogPage() {
           >
             {tb.ctaBtn}
           </Link>
-        </div>
+        </div>}
       </div>
     </main>
   );

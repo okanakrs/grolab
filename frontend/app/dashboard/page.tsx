@@ -7,6 +7,7 @@ import { Navbar } from "../../components/navbar";
 import { PremiumToolbox } from "../../components/premium-toolbox";
 import { fetchIdeaHistory, fetchCredits, type SavedIdea, type SaaSIdea } from "../../lib/mcp";
 import { createClient } from "../../lib/supabase";
+import { useLanguage } from "../../contexts/language-context";
 
 const ACCENTS = [
   { dot: "bg-emerald-400", mrr: "border-emerald-500/25 bg-emerald-500/[0.08] text-emerald-400", label: "text-emerald-500/60", divider: "bg-emerald-500/10", glow: "shadow-[0_0_40px_-20px_rgba(16,185,129,0.35)]" },
@@ -14,7 +15,13 @@ const ACCENTS = [
   { dot: "bg-violet-400", mrr: "border-violet-500/25 bg-violet-500/[0.08] text-violet-400", label: "text-violet-500/60", divider: "bg-violet-500/10", glow: "shadow-[0_0_40px_-20px_rgba(139,92,246,0.35)]" },
 ];
 
-function IdeaDetailModal({ idea, onClose, accent, userPlan }: { idea: SaaSIdea; onClose: () => void; accent: typeof ACCENTS[0]; userPlan: string }) {
+function IdeaDetailModal({ idea, onClose, accent, userPlan, td }: {
+  idea: SaaSIdea;
+  onClose: () => void;
+  accent: typeof ACCENTS[0];
+  userPlan: string;
+  td: { solution: string; targetAudience: string; close: string };
+}) {
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -44,11 +51,11 @@ function IdeaDetailModal({ idea, onClose, accent, userPlan }: { idea: SaaSIdea; 
 
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
-            <p className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${accent.label}`}>Çözüm</p>
+            <p className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${accent.label}`}>{td.solution}</p>
             <p className="mt-2 text-sm leading-relaxed text-zinc-300">{idea.cozum}</p>
           </div>
           <div>
-            <p className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${accent.label}`}>Hedef Kitle</p>
+            <p className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${accent.label}`}>{td.targetAudience}</p>
             <p className="mt-2 text-sm leading-relaxed text-zinc-300">{idea.hedef_kitle}</p>
           </div>
         </div>
@@ -61,7 +68,7 @@ function IdeaDetailModal({ idea, onClose, accent, userPlan }: { idea: SaaSIdea; 
           onClick={onClose}
           className="mt-6 w-full rounded-xl border border-white/[0.08] py-2.5 text-sm text-zinc-400 transition hover:border-white/20 hover:text-white"
         >
-          Kapat
+          {td.close}
         </button>
       </motion.div>
     </motion.div>
@@ -70,6 +77,8 @@ function IdeaDetailModal({ idea, onClose, accent, userPlan }: { idea: SaaSIdea; 
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { t, lang } = useLanguage();
+  const td = t.dashboard;
   const [history, setHistory] = useState<SavedIdea[]>([]);
   const [loading, setLoading] = useState(true);
   const [userPlan, setUserPlan] = useState("free");
@@ -91,6 +100,8 @@ export default function DashboardPage() {
     init();
   }, [router]);
 
+  const dateLocale = lang === "tr" ? "tr-TR" : "en-US";
+
   return (
     <main className="relative min-h-screen bg-background text-foreground">
       <div className="pointer-events-none fixed inset-0 -z-10">
@@ -103,12 +114,12 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-5xl px-4 py-12 sm:px-8">
         <div className="mb-10">
           <h1 className="text-3xl font-bold tracking-[-0.025em] text-white sm:text-4xl">
-            Fikir{" "}
+            {td.title1}{" "}
             <span className="bg-gradient-to-r from-emerald-400 to-indigo-400 bg-clip-text text-transparent">
-              Geçmişi
+              {td.titleHighlight}
             </span>
           </h1>
-          <p className="mt-2 text-sm text-zinc-500">Daha önce ürettiğin tüm SaaS fikirleri</p>
+          <p className="mt-2 text-sm text-zinc-500">{td.subtitle}</p>
         </div>
 
         {loading ? (
@@ -117,12 +128,12 @@ export default function DashboardPage() {
           </div>
         ) : history.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] py-24 text-center">
-            <p className="text-zinc-400">Henüz hiç fikir üretmedin.</p>
+            <p className="text-zinc-400">{td.empty}</p>
             <a
               href="/#idea-topic"
               className="rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-6 py-2.5 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:brightness-110"
             >
-              İlk fikrini üret →
+              {td.emptyBtn}
             </a>
           </div>
         ) : (
@@ -137,15 +148,15 @@ export default function DashboardPage() {
                 {/* Entry header */}
                 <div className="flex items-center justify-between border-b border-white/[0.04] px-5 py-3">
                   <div>
-                    <span className="text-sm font-semibold text-white">{entry.topic || "Rastgele"}</span>
+                    <span className="text-sm font-semibold text-white">{entry.topic || td.randomTopic}</span>
                     <span className="ml-3 text-xs text-zinc-600">
-                      {new Date(entry.created_at).toLocaleDateString("tr-TR", {
+                      {new Date(entry.created_at).toLocaleDateString(dateLocale, {
                         day: "numeric", month: "long", year: "numeric",
                       })}
                     </span>
                   </div>
                   <span className="rounded-full border border-white/[0.06] px-2.5 py-0.5 text-[11px] text-zinc-500">
-                    {entry.ideas.length} fikir
+                    {td.ideaCount(entry.ideas.length)}
                   </span>
                 </div>
 
@@ -170,7 +181,7 @@ export default function DashboardPage() {
                         </div>
                         <p className="text-xs leading-relaxed text-zinc-500 line-clamp-2">{idea.problem}</p>
                         <span className="mt-auto text-[10px] text-zinc-600 group-hover:text-zinc-400 transition">
-                          Detayı gör →
+                          {td.viewDetail}
                         </span>
                       </button>
                     );
@@ -188,6 +199,7 @@ export default function DashboardPage() {
             idea={selected.idea}
             accent={selected.accent}
             userPlan={userPlan}
+            td={td}
             onClose={() => setSelected(null)}
           />
         )}

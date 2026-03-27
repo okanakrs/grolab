@@ -1,9 +1,11 @@
 import { motion, AnimatePresence } from "framer-motion";
+import { Lock } from "lucide-react";
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 export type ResearchStep = {
   id: string;
-  icon: string;
+  icon: ReactNode;
   label: string;
   detail?: string;
   status: "pending" | "active" | "done";
@@ -60,7 +62,7 @@ export function DeepResearchProgress({ steps }: Props) {
                 : "border-zinc-800/40 bg-zinc-950/30",
             ].join(" ")}
           >
-            <span className={`text-base leading-none ${step.locked ? "grayscale opacity-30" : ""}`}>
+            <span className={`flex h-5 w-5 flex-shrink-0 items-center justify-center ${step.locked ? "opacity-25 grayscale" : ""}`}>
               {step.icon}
             </span>
 
@@ -94,8 +96,8 @@ export function DeepResearchProgress({ steps }: Props) {
             <span className="ml-2 flex-shrink-0">
               {step.locked ? (
                 <Link href="/pricing">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full border border-zinc-800 text-[10px] text-zinc-700 transition hover:border-emerald-500/40 hover:text-emerald-500">
-                    🔒
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full border border-zinc-800 text-zinc-700 transition hover:border-emerald-500/40 hover:text-emerald-500">
+                    <Lock size={10} strokeWidth={2} />
                   </span>
                 </Link>
               ) : step.status === "done" ? (

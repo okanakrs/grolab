@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { LanguageProvider } from "../contexts/language-context";
+import { Footer } from "../components/footer";
 import "./globals.css";
 
 const jakarta = Plus_Jakarta_Sans({
@@ -31,11 +32,7 @@ export default function RootLayout({
       <body className={jakarta.className}>
         <LanguageProvider>
           {children}
-          <footer className="border-t border-white/[0.04] py-6 text-center">
-            <p className="text-xs text-zinc-700">
-              © {new Date().getFullYear()} GroLab. Tüm hakları saklıdır.
-            </p>
-          </footer>
+          <Footer />
         </LanguageProvider>
       </body>
     </html>

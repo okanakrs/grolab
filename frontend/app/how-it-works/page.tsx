@@ -1,8 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { Activity, MessageCircle, PenLine, Plug2, Search, Sparkles, TrendingUp } from "lucide-react";
 import { Navbar } from "../../components/navbar";
 import { useLanguage } from "../../contexts/language-context";
+import { createClient } from "../../lib/supabase";
+
+const STEP_ICONS: Record<string, React.ReactNode> = {
+  "01": <PenLine    size={28} color="#00C896" strokeWidth={1.75} />,
+  "02": <Activity   size={28} color="#00C896" strokeWidth={1.75} />,
+  "03": <Search     size={28} color="#00C896" strokeWidth={1.75} />,
+  "04": <MessageCircle size={28} color="#00C896" strokeWidth={1.75} />,
+  "05": <Sparkles   size={28} color="#00C896" strokeWidth={1.75} />,
+  "06": <Plug2      size={28} color="#00C896" strokeWidth={1.75} />,
+  "07": <TrendingUp size={28} color="#00C896" strokeWidth={1.75} />,
+};
 
 const colorMap: Record<string, { badge: string; dot: string; glow: string }> = {
   emerald: {
@@ -40,6 +53,15 @@ const colorMap: Record<string, { badge: string; dot: string; glow: string }> = {
 export default function HowItWorksPage() {
   const { t } = useLanguage();
   const th = t.howItWorks;
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    const supabase = createClient();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event: string, session: { user: unknown } | null) => {
+      setIsLoggedIn(!!session?.user);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-background text-foreground">
@@ -100,7 +122,7 @@ export default function HowItWorksPage() {
 
                   <div className="flex-1">
                     <div className="flex flex-wrap items-center gap-3">
-                      <span className="text-xl leading-none">{step.icon}</span>
+                      <span className="flex-shrink-0">{STEP_ICONS[step.number] ?? <Activity size={28} color="#00C896" strokeWidth={1.75} />}</span>
                       <h2 className="text-lg font-bold text-white">{step.title}</h2>
                       <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${c.badge}`}>
                         {step.subtitle}
@@ -175,7 +197,7 @@ export default function HowItWorksPage() {
         </section>
 
         {/* CTA */}
-        <div className="mt-14 flex flex-col items-center gap-4 rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.03] to-transparent p-10 text-center">
+        {!isLoggedIn && <div className="mt-14 flex flex-col items-center gap-4 rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.03] to-transparent p-10 text-center">
           <h2 className="text-2xl font-bold text-white">{th.cta.title}</h2>
           <p className="max-w-sm text-sm text-zinc-500">{th.cta.subtitle}</p>
           <div className="mt-2 flex flex-wrap justify-center gap-3">
@@ -192,7 +214,7 @@ export default function HowItWorksPage() {
               {th.cta.btn2}
             </Link>
           </div>
-        </div>
+        </div>}
       </div>
     </main>
   );
