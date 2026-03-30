@@ -46,7 +46,7 @@ async def get_guest_count(token: str) -> int:
         return await asyncio.to_thread(_fetch)
     except Exception as e:
         logger.warning(f"guest_get_count_failed token={token[:8]} error={e}")
-        return 0
+        return GUEST_MAX_GENERATIONS  # fail closed
 
 
 async def increment_guest_count(token: str) -> int:

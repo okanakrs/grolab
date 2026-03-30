@@ -88,6 +88,7 @@ async def get_idea_history(
 
 @router.get("/ideas/stream")
 async def stream_ideas(
+    request: Request,
     topic: str = Query(default=""),
     idea_count: int = Query(default=3, ge=1, le=3),
     lang: str = Query(default="tr"),
@@ -104,7 +105,14 @@ async def stream_ideas(
 
     if is_guest:
         # Guest: 1 üretim hakkı, sadece 1 fikir, sadece 3 kaynak
-        if not await guest_can_generate(x_guest_token):
+        client_ip = request.headers.get("X-Forwarded-For", "").split(",")[0].strip() or "unknown"
+
+        if not x_guest_token or len(x_guest_token) < 8:
+            return StreamingResponse(_guest_limit_error(), media_type="text/event-stream")
+
+        token_ok = await guest_can_generate(x_guest_token)
+        ip_ok = await guest_can_generate(f"ip:{client_ip}")
+        if not token_ok or not ip_ok:
             return StreamingResponse(_guest_limit_error(), media_type="text/event-stream")
         idea_count = 1
         plan = "free"
@@ -135,6 +143,7 @@ async def stream_ideas(
             )
             if is_guest:
                 await increment_guest_count(x_guest_token)
+                await increment_guest_count(f"ip:{client_ip}")
             else:
                 await consume_credit(user_id, amount=idea_count)
                 if user_id != "demo-user":
