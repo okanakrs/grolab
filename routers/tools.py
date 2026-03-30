@@ -54,6 +54,45 @@ _TOOL_PROMPTS: dict[str, str] = {
     ),
 }
 
+_TOOL_PROMPTS_EN: dict[str, str] = {
+    "marketing": (
+        "Prepare a comprehensive marketing strategy for this SaaS idea.\n"
+        "Product: {isim} | Problem: {problem} | Solution: {cozum} | Target: {hedef_kitle}\n\n"
+        "Include the following (bullet points, concise and actionable):\n"
+        "1) Positioning & core message\n"
+        "2) Top 3 acquisition channels\n"
+        "3) Content strategy\n"
+        "4) First 30-day launch plan\n"
+        "Respond in English."
+    ),
+    "tech_stack": (
+        "Recommend the ideal tech stack for this SaaS idea.\n"
+        "Product: {isim} | Problem: {problem} | Solution: {cozum} | Target: {hedef_kitle}\n\n"
+        "Include:\n"
+        "1) Frontend\n2) Backend\n3) Database\n4) Hosting / Infra\n5) 3rd-party services\n"
+        "Explain each choice in one sentence. Respond in English."
+    ),
+    "competitor": (
+        "Perform an in-depth competitor analysis for this SaaS idea.\n"
+        "Product: {isim} | Problem: {problem} | Solution: {cozum} | Target: {hedef_kitle}\n\n"
+        "Include:\n"
+        "1) Direct competitors (3-5) — strengths and weaknesses\n"
+        "2) Indirect / alternative solutions\n"
+        "3) Empty niches and differentiation opportunities\n"
+        "4) Competitive advantage recommendations\n"
+        "Respond in English."
+    ),
+    "roadmap": (
+        "Prepare a 3-month MVP roadmap for this SaaS idea.\n"
+        "Product: {isim} | Problem: {problem} | Solution: {cozum} | Target: {hedef_kitle}\n\n"
+        "For each month:\n"
+        "- Core objective\n"
+        "- 3-4 main action items\n"
+        "- Success criteria\n"
+        "Be realistic and actionable. Respond in English."
+    ),
+}
+
 
 class IdeaInput(BaseModel):
     isim: str
@@ -66,18 +105,20 @@ class IdeaInput(BaseModel):
 class ToolRequest(BaseModel):
     idea: IdeaInput
     tool: ToolType
+    lang: str = "tr"
 
 
 class ToolResponse(BaseModel):
     result: str
 
 
-async def _call_claude(idea: IdeaInput, tool: ToolType) -> str:
+async def _call_claude(idea: IdeaInput, tool: ToolType, lang: str = "tr") -> str:
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY is missing")
 
-    template = _TOOL_PROMPTS[tool]
+    prompts = _TOOL_PROMPTS_EN if lang == "en" else _TOOL_PROMPTS
+    template = prompts[tool]
     prompt = template.format(
         isim=idea.isim,
         problem=idea.problem,
@@ -85,11 +126,17 @@ async def _call_claude(idea: IdeaInput, tool: ToolType) -> str:
         hedef_kitle=idea.hedef_kitle,
     )
 
+    system = (
+        "You are an experienced SaaS consultant. Give clear, actionable, and concise answers."
+        if lang == "en"
+        else "Sen deneyimli bir SaaS danışmanısın. Net, uygulanabilir ve kısa yanıtlar ver."
+    )
+
     payload = {
         "model": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
         "max_tokens": 3000,
         "temperature": 0.6,
-        "system": "Sen deneyimli bir SaaS danışmanısın. Net, uygulanabilir ve kısa yanıtlar ver.",
+        "system": system,
         "messages": [{"role": "user", "content": prompt}],
     }
 
@@ -125,7 +172,7 @@ async def analyze_idea(
         raise HTTPException(status_code=402, detail="Insufficient credits")
 
     try:
-        result = await _call_claude(payload.idea, payload.tool)
+        result = await _call_claude(payload.idea, payload.tool, lang=payload.lang)
     except Exception:
         logger.exception(f"tool_analyze_failed tool={payload.tool} user_id={user_id}")
         raise HTTPException(status_code=500, detail="Analiz sırasında bir hata oluştu")

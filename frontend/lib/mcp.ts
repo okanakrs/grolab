@@ -334,11 +334,11 @@ export async function fetchIdeaHistory(): Promise<SavedIdea[]> {
 
 export type ToolType = "marketing" | "tech_stack" | "competitor" | "roadmap";
 
-export async function analyzeIdea(idea: SaaSIdea, tool: ToolType): Promise<string> {
+export async function analyzeIdea(idea: SaaSIdea, tool: ToolType, lang: string = "tr"): Promise<string> {
   const response = await fetch(`${BACKEND_URL}/api/tools/analyze`, {
     method: "POST",
     headers: await baseHeaders(),
-    body: JSON.stringify({ idea, tool }),
+    body: JSON.stringify({ idea, tool, lang }),
   });
 
   if (!response.ok) {

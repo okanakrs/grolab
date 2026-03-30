@@ -13,11 +13,22 @@ const jakarta = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "GroLab — AI-Powered SaaS Idea Generator",
   description:
-    "Generate validated SaaS ideas in seconds using real-time data from Google Trends, Product Hunt, and Reddit — powered by Claude AI.",
+    "Generate validated SaaS ideas backed by real market data from Product Hunt, Reddit, and Google Trends.",
+  metadataBase: new URL("https://grolab.app"),
+  openGraph: {
+    title: "GroLab — AI-Powered SaaS Idea Generator",
+    description: "Generate validated SaaS ideas backed by real market data.",
+    url: "https://grolab.app",
+    siteName: "GroLab",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "GroLab — AI-Powered SaaS Idea Generator",
+    description: "Generate validated SaaS ideas backed by real market data.",
+  },
   icons: {
-    icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
-    ],
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
     apple: "/icon.svg",
   },
 };

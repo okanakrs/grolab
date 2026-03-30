@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import random
+import time
 import uuid
 from typing import Literal, Optional
 
@@ -45,31 +46,83 @@ logger = logging.getLogger("grolab.idea_service")
 
 
 _RANDOM_DOMAINS = [
-    "veterinary clinic management software",
-    "independent bookstore inventory tools",
-    "podcast production workflow automation",
+    # Specific niches
+    "sourdough bakery inventory and recipe costing",
+    "tattoo studio booking and aftercare management",
+    "fishing charter scheduling and customer management",
+    "rural pharmacy inventory and prescription management",
+    "church management and volunteer coordination software",
+    "funeral home case management and family communication",
+    "dog daycare check-in and webcam streaming platform",
     "food truck scheduling and route optimization",
-    "home renovation project management for contractors",
-    "language school student tracking platform",
-    "craft brewery batch and recipe management",
-    "personal trainer client progress tracking",
-    "nonprofit grant writing and reporting tools",
-    "dental practice patient communication software",
-    "wedding planner vendor coordination platform",
-    "photography studio booking and delivery tools",
-    "auto repair shop diagnostic and billing software",
-    "childcare center attendance and billing platform",
-    "farmers market vendor and logistics management",
-    "music teacher student scheduling and payment tools",
-    "local tour operator booking management software",
-    "pet grooming salon appointment and loyalty tools",
     "escape room booking and experience management",
-    "co-working space desk booking and billing platform",
-    "artisan marketplace seller analytics tools",
-    "tutoring center session scheduling software",
-    "yoga studio membership and class booking tools",
-    "construction subcontractor job tracking platform",
-    "catering company order and event management tools",
+    "craft brewery batch and recipe management",
+    # Problem-focused
+    "remote team async communication and status updates",
+    "freelancer invoice chasing and payment automation",
+    "SaaS churn prediction and customer health scoring",
+    "technical interview question bank and grading tool",
+    "construction subcontractor job tracking and payments",
+    "landlord rent collection and maintenance ticketing",
+    "restaurant staff scheduling and tip distribution",
+    "home renovation project management for contractors",
+    "nonprofit grant writing and deadline tracking tools",
+    "e-commerce return fraud detection and management",
+    # Trend-based
+    "AI agent workflow orchestration and monitoring",
+    "creator monetization tools for niche newsletters",
+    "local business AI chatbot builder and deployment",
+    "carbon footprint tracking for small manufacturers",
+    "short-form video repurposing and distribution tool",
+    "AI-powered code review and PR summarization tool",
+    "voice note transcription and action item extraction",
+    "synthetic data generation for ML training pipelines",
+    "LLM prompt version control and A/B testing platform",
+    "AI-generated product photography for e-commerce",
+    # Underserved markets
+    "veterinary telemedicine and appointment scheduling",
+    "rural pharmacy prescription delivery coordination",
+    "independent bookstore inventory and event tools",
+    "artisan marketplace seller analytics and payouts",
+    "farmers market vendor logistics and pre-order tools",
+    "language school student progress and billing tools",
+    "local tour operator booking and guide management",
+    "music teacher student scheduling and recital planning",
+    "childcare center attendance, billing and parent portal",
+    "catering company event order and kitchen management",
+    # B2C ideas
+    "habit tracking for adults with ADHD",
+    "expat tax filing assistant and document organizer",
+    "personal trainer client workout and nutrition tracker",
+    "sleep quality journaling and pattern analysis app",
+    "wedding budget tracker and vendor review platform",
+    "motorcycle trip route planner and gear checklist",
+    "board game collection management and session logger",
+    "plant care reminders and community disease identifier",
+    "home wine cellar inventory and pairing suggester",
+    "personal finance tracker for freelancers and creators",
+    # Developer tools
+    "API mock server management and team sharing",
+    "database schema versioning and migration diff tool",
+    "cron job monitoring and alerting dashboard",
+    "webhook testing and replay management platform",
+    "environment variable management for dev teams",
+    "API documentation generation from code comments",
+    "feature flag management with targeting rules",
+    "log aggregation and anomaly detection for indie apps",
+    "uptime and performance monitoring for side projects",
+    "self-hosted analytics alternative to Google Analytics",
+    # Vertical SaaS
+    "dental practice patient communication and recall",
+    "yoga studio membership, class booking and challenges",
+    "photography studio booking, gallery delivery and proofing",
+    "co-working space hot-desk booking and billing platform",
+    "tutoring center session scheduling and parent invoicing",
+    "pet grooming salon appointment and loyalty program",
+    "auto repair shop diagnostic notes and billing software",
+    "podcast production workflow and guest coordination",
+    "personal stylist client wardrobe and shopping tools",
+    "wedding planner vendor coordination and timeline builder",
 ]
 
 
@@ -158,13 +211,24 @@ def _build_user_prompt(topic: str, market_context: MarketContext, plan: str = "f
     else:
         if is_en:
             context_block = (
-                f"No market data available. Using your own knowledge, generate a SaaS idea in the {topic_text} space "
-                "that solves a real problem and targets a niche that is not yet crowded.\n"
+                f"Topic: {topic_text}\n\n"
+                "No market data available. Use your knowledge to generate a CREATIVE and "
+                "SPECIFIC SaaS idea for this niche. Requirements:\n"
+                "- Target a very specific underserved audience (not 'small businesses' in general)\n"
+                "- Solve one concrete, painful problem\n"
+                "- Avoid obvious/saturated markets (no generic CRM, todo apps, etc.)\n"
+                "- Make the product name memorable and niche-specific\n"
+                "- MRR estimate should be realistic for the niche size\n\n"
             )
         else:
             context_block = (
-                f"Pazar verisi mevcut degil. Sadece kendi bilginle {topic_text} alaninda "
-                "gercek bir problemi cozen, henuz kalabalik olmayan bir nische SaaS fikri olustur.\n"
+                f"Konu: {topic_text}\n\n"
+                "Pazar verisi mevcut degil. Bu niche icin YARATICI ve SPESIFIK bir SaaS fikri uret. Gereksinimler:\n"
+                "- Cok spesifik ve yetersiz hizmet alan bir kitleyi hedefle ('kucuk isletmeler' gibi genel degil)\n"
+                "- Tek bir somut ve agri yaratan problemi coz\n"
+                "- Belirgin/doymus pazarlardan kacin (genel CRM, yapilacaklar listesi vb.)\n"
+                "- Urun adini akilda kalici ve niche'e ozgu yap\n"
+                "- MRR tahmini niche buyuklugune gore gercekci olmali\n\n"
             )
 
     if is_en:
@@ -477,7 +541,8 @@ async def generate_saas_ideas(
 
     raw_topic = topic.strip()
     is_random = not raw_topic
-    effective_topic = raw_topic if raw_topic else random.choice(_RANDOM_DOMAINS)
+    rng = random.Random(time.time())
+    effective_topic = raw_topic if raw_topic else rng.choice(_RANDOM_DOMAINS)
     logger.info(f"idea_generation_started provider={provider} request_id={request_id} idea_count={idea_count} effective_topic={effective_topic!r} is_random={is_random}")
 
     market_context = MarketContext(

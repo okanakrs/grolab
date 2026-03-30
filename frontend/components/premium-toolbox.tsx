@@ -60,11 +60,12 @@ interface PremiumToolboxProps {
 export function PremiumToolbox({ idea, plan }: PremiumToolboxProps) {
   const isPro = plan === "pro" || plan === "enterprise";
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const TOOLS = t.toolbox.tools;
   const [activeResult, setActiveResult] = useState<{ tool: ToolType; content: string } | null>(null);
   const [loadingTool, setLoadingTool] = useState<ToolType | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [resultsCache, setResultsCache] = useState<Record<string, string>>({});
 
   const handleTool = async (tool: ToolType) => {
     if (!isPro) {
@@ -72,17 +73,23 @@ export function PremiumToolbox({ idea, plan }: PremiumToolboxProps) {
       return;
     }
 
-    setLoadingTool(tool);
-    setError(null);
     if (activeResult?.tool === tool) {
       setActiveResult(null);
-      setLoadingTool(null);
       return;
     }
+
+    if (resultsCache[tool]) {
+      setActiveResult({ tool, content: resultsCache[tool] });
+      return;
+    }
+
+    setLoadingTool(tool);
+    setError(null);
     setActiveResult(null);
 
     try {
-      const result = await analyzeIdea(idea, tool);
+      const result = await analyzeIdea(idea, tool, lang);
+      setResultsCache(prev => ({ ...prev, [tool]: result }));
       setActiveResult({ tool, content: result });
     } catch {
       setError(t.toolbox.error);
