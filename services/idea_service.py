@@ -37,7 +37,7 @@ class IdeaGenerationResult(BaseModel):
 
 LLMProvider = Literal["openai", "anthropic"]
 LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "90"))
-MARKET_RESEARCH_TIMEOUT_SECONDS = float(os.getenv("MARKET_RESEARCH_TIMEOUT_SECONDS", "30"))
+MARKET_RESEARCH_TIMEOUT_SECONDS = float(os.getenv("MARKET_RESEARCH_TIMEOUT_SECONDS", "55"))
 LLM_STAGE_TIMEOUT_SECONDS = float(os.getenv("LLM_STAGE_TIMEOUT_SECONDS", "90"))
 ALLOW_FALLBACK_IDEAS = os.getenv("ALLOW_FALLBACK_IDEAS", "0") == "1"
 
@@ -73,7 +73,7 @@ _RANDOM_DOMAINS = [
 ]
 
 
-def _build_user_prompt(topic: str, market_context: MarketContext) -> str:
+def _build_user_prompt(topic: str, market_context: MarketContext, plan: str = "free", lang: str = "tr") -> str:
     topic_text = topic.strip() or "AI-driven products"
     seed = str(uuid.uuid4())[:8]
 
@@ -116,31 +116,77 @@ def _build_user_prompt(topic: str, market_context: MarketContext) -> str:
 
     has_market_data = product_hunt_text != "- no_data" or reddit_text != "- no_data" or trend_text != "- no_data"
 
-    if has_market_data:
-        app_store_block = (
-            f"App Store düşük puanlı şikâyetler (gerçek kullanıcı pain point'leri):\n{app_store_text}\n"
-            if app_store_text else ""
-        )
-        hn_block = (
-            f"Hacker News tartışmaları (founder/developer sinyalleri):\n{hn_text}\n"
-            if hn_text else ""
-        )
-        context_block = (
-            "Product Hunt sinyalleri:\n"
-            f"{product_hunt_text}\n"
-            "Reddit problem/need sinyalleri:\n"
-            f"{reddit_text}\n"
-            "Google Trends sinyalleri:\n"
-            f"{trend_text}\n"
-            f"{hn_block}"
-            f"{app_store_block}"
-        )
-    else:
-        context_block = (
-            f"Pazar verisi mevcut degil. Sadece kendi bilginle {topic_text} alaninda "
-            "gercek bir problemi cozen, henuz kalabalik olmayan bir nische SaaS fikri olustur.\n"
-        )
+    is_en = lang == "en"
 
+    if has_market_data:
+        if is_en:
+            context_block = (
+                "Analyze the market signals below to extract PATTERNS, then generate ideas:\n\n"
+                "## EXISTING COMPETITORS (Product Hunt)\n"
+                f"{product_hunt_text}\n\n"
+                "## USER NEEDS (Reddit pain points)\n"
+                f"{reddit_text}\n\n"
+                "## RISING SEARCH TRENDS (Google Trends)\n"
+                f"{trend_text}\n\n"
+                f"{'## DEVELOPER/FOUNDER SIGNALS (Hacker News)' + chr(10) + hn_text + chr(10) + chr(10) if hn_text and plan in ('pro', 'enterprise') else ''}"
+                f"{'## PRODUCT COMPLAINTS & GAPS (App Store)' + chr(10) + app_store_text + chr(10) + chr(10) if app_store_text else ''}"
+                "## TASK\n"
+                "Extract the following patterns from the signals above:\n"
+                "- Which problems repeat across multiple sources?\n"
+                "- What gaps have competitors failed to address?\n"
+                "- Which niches have demand but are not yet crowded?\n"
+                "Generate an ORIGINAL SaaS idea based on this analysis.\n\n"
+            )
+        else:
+            context_block = (
+                "Asagidaki pazar sinyallerini analiz ederek PATTERN cikar, sonra fikir uret:\n\n"
+                "## MEVCUT RAKIPLER (Product Hunt)\n"
+                f"{product_hunt_text}\n\n"
+                "## KULLANICI IHTIYACLARI (Reddit pain points)\n"
+                f"{reddit_text}\n\n"
+                "## YUKSELIS GOSTEREN ARAMALAR (Google Trends)\n"
+                f"{trend_text}\n\n"
+                f"{'## DEVELOPER/FOUNDER SINYALLERI (Hacker News)' + chr(10) + hn_text + chr(10) + chr(10) if hn_text and plan in ('pro', 'enterprise') else ''}"
+                f"{'## MEVCUT URUN SIKAYET VE EKSIKLER (App Store)' + chr(10) + app_store_text + chr(10) + chr(10) if app_store_text else ''}"
+                "## GOREV\n"
+                "Yukardaki sinyallerden su pattern'leri cikar:\n"
+                "- Hangi problemler birden fazla kaynakta tekrar ediyor?\n"
+                "- Rakiplerin cozemedigi ne var?\n"
+                "- Hangi niche kalabalik degil ama talep var?\n"
+                "Bu analiz uzerine OZGUN bir SaaS fikri uret.\n\n"
+            )
+    else:
+        if is_en:
+            context_block = (
+                f"No market data available. Using your own knowledge, generate a SaaS idea in the {topic_text} space "
+                "that solves a real problem and targets a niche that is not yet crowded.\n"
+            )
+        else:
+            context_block = (
+                f"Pazar verisi mevcut degil. Sadece kendi bilginle {topic_text} alaninda "
+                "gercek bir problemi cozen, henuz kalabalik olmayan bir nische SaaS fikri olustur.\n"
+            )
+
+    if is_en:
+        return (
+            f"[seed={seed}] "
+            f"Generate an ORIGINAL SaaS idea covering this area: {topic_text}.\n"
+            f"{context_block}"
+            "Response must be valid JSON only; do not add markdown or explanations.\n"
+            "JSON format must be as follows:\n"
+            "{\n"
+            '  "ideas": [\n'
+            "    {\n"
+            '      "isim": "...",\n'
+            '      "problem": "...",\n'
+            '      "cozum": "...",\n'
+            '      "hedef_kitle": "...",\n'
+            '      "tahmini_mrr_potansiyeli": "..."\n'
+            "    }\n"
+            "  ]\n"
+            "}\n"
+            "All fields must be filled."
+        )
     return (
         f"[seed={seed}] "
         f"Su alani kapsayan OZGUN bir SaaS fikri uret: {topic_text}.\n"
@@ -162,8 +208,9 @@ def _build_user_prompt(topic: str, market_context: MarketContext) -> str:
     )
 
 
-def _derive_market_evidence(market_context: MarketContext, plan: str = "free") -> tuple[list[str], list[str], list[str]]:
+def _derive_market_evidence(market_context: MarketContext, plan: str = "free", lang: str = "tr") -> tuple[list[str], list[str], list[str]]:
     is_pro = plan in ("pro", "enterprise")
+    is_en = lang == "en"
 
     trends = [
         f"Google Trends: {item.keyword} ({item.value})"
@@ -177,29 +224,39 @@ def _derive_market_evidence(market_context: MarketContext, plan: str = "free") -
 
     market_evidence: list[str] = []
     if market_context.trend_keywords:
+        n = len(market_context.trend_keywords)
         market_evidence.append(
-            f"Google'da ilgili alanda {len(market_context.trend_keywords)} yukselen sinyal bulundu"
+            f"{n} rising signals found on Google in this area" if is_en
+            else f"Google'da ilgili alanda {n} yukselen sinyal bulundu"
         )
     if market_context.product_hunt_products:
+        n = len(market_context.product_hunt_products)
         market_evidence.append(
-            f"Product Hunt'ta benzer {len(market_context.product_hunt_products)} urun tespit edildi"
+            f"{n} similar products found on Product Hunt" if is_en
+            else f"Product Hunt'ta benzer {n} urun tespit edildi"
         )
     if market_context.reddit_needs:
+        n = len(market_context.reddit_needs)
         market_evidence.append(
-            f"Reddit'te {len(market_context.reddit_needs)} problem/need sinyali yakalandi"
+            f"{n} problem/need signals captured on Reddit" if is_en
+            else f"Reddit'te {n} problem/need sinyali yakalandi"
         )
 
     if is_pro:
         hn_posts = getattr(market_context, "hn_posts", [])
         if hn_posts:
+            n = len(hn_posts)
             market_evidence.append(
-                f"Hacker News'te {len(hn_posts)} ilgili tartisma tespit edildi"
+                f"{n} relevant discussions found on Hacker News" if is_en
+                else f"Hacker News'te {n} ilgili tartisma tespit edildi"
             )
 
         app_store_reviews = getattr(market_context, "app_store_reviews", [])
         if app_store_reviews:
+            n = len(app_store_reviews)
             market_evidence.append(
-                f"App Store'da {len(app_store_reviews)} dusuk puanli sikayet analiz edildi"
+                f"{n} low-rated complaints analyzed on App Store" if is_en
+                else f"App Store'da {n} dusuk puanli sikayet analiz edildi"
             )
 
     return market_evidence[:6], trends[:6], competitors[:6]
@@ -249,7 +306,7 @@ async def _post_with_retry(
 ) -> httpx.Response:
     async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10, read=90, write=10, pool=5)) as client:
         async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(1),
+            stop=stop_after_attempt(3),
             retry=retry_if_exception(_should_retry),
             reraise=True,
         ):
@@ -278,12 +335,14 @@ async def _call_openai(
     market_context: MarketContext,
     req_logger: logging.Logger,
     idea_count: int = 3,
+    plan: str = "free",
+    lang: str = "tr",
 ) -> SaaSIdeaList:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is missing in .env")
 
-    user_prompt = _build_user_prompt(topic, market_context)
+    user_prompt = _build_user_prompt(topic, market_context, plan=plan, lang=lang)
     schema = {
         "name": "saas_idea_response",
         "strict": True,
@@ -357,18 +416,25 @@ async def _call_anthropic(
     market_context: MarketContext,
     req_logger: logging.Logger,
     idea_count: int = 3,
+    plan: str = "free",
+    lang: str = "tr",
 ) -> SaaSIdeaList:
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY is missing in .env")
 
-    user_prompt = _build_user_prompt(topic, market_context)
+    user_prompt = _build_user_prompt(topic, market_context, plan=plan, lang=lang)
+    suffix = (
+        f"\nPlease generate {idea_count} different SaaS ideas and add them to the 'ideas' array in the JSON."
+        if lang == "en" else
+        f"\nLutfen {idea_count} adet farkli SaaS fikri uret ve JSON'daki 'ideas' dizisine ekle."
+    )
     payload = {
         "model": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
         "max_tokens": 4096,
         "temperature": 1.0,
         "system": "You are a SaaS strategist. Output strict JSON only. Always generate fresh, unique ideas — never repeat previous responses.",
-        "messages": [{"role": "user", "content": user_prompt + f"\nLutfen {idea_count} adet farkli SaaS fikri uret ve JSON'daki 'ideas' dizisine ekle."}],
+        "messages": [{"role": "user", "content": user_prompt + suffix}],
     }
 
     req_logger.info("llm_call_start provider=anthropic")
@@ -399,6 +465,7 @@ async def generate_saas_ideas(
     idea_count: int = 3,
     on_progress: Optional[ProgressCallback] = None,
     plan: str = "free",
+    lang: str = "tr",
 ) -> IdeaGenerationResult:
     provider = os.getenv("LLM_PROVIDER", "openai").strip().lower()
     req_logger = logger
@@ -442,9 +509,9 @@ async def generate_saas_ideas(
 
     try:
         if provider == "anthropic":
-            response = await _call_anthropic(effective_topic, market_context, req_logger, idea_count=idea_count)
+            response = await _call_anthropic(effective_topic, market_context, req_logger, idea_count=idea_count, plan=plan, lang=lang)
         else:
-            response = await _call_openai(effective_topic, market_context, req_logger, idea_count=idea_count)
+            response = await _call_openai(effective_topic, market_context, req_logger, idea_count=idea_count, plan=plan, lang=lang)
     except (asyncio.TimeoutError, httpx.HTTPError, json.JSONDecodeError, ValidationError, RuntimeError) as error:
         if ALLOW_FALLBACK_IDEAS:
             req_logger.warning(
@@ -469,7 +536,7 @@ async def generate_saas_ideas(
             raise RuntimeError("Unexpected error while generating ideas") from error
 
     # Sadece istenen kadar fikir döndür
-    market_evidence, trends, competitors = _derive_market_evidence(market_context, plan=plan)
+    market_evidence, trends, competitors = _derive_market_evidence(market_context, plan=plan, lang=lang)
     logger.info(
         f"idea_generation_completed ideas={len(response.ideas)} request_id={request_id}"
     )

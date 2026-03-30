@@ -90,6 +90,13 @@ async def _fetch_product_hunt(topic: str) -> list[ProductHuntProduct]:
         tokens = set(text.split())
         return len(topic_tokens & tokens)
 
+    def _has_full_word_match(name: str, tagline: str) -> bool:
+        text = f"{name} {tagline}".lower()
+        return any(
+            re.search(r"\b" + re.escape(token) + r"\b", text)
+            for token in topic_tokens
+        )
+
     products: list[ProductHuntProduct] = []
     for hit in data.get("hits", []):
         name = (hit.get("name") or "Unknown").strip()
@@ -98,9 +105,11 @@ async def _fetch_product_hunt(topic: str) -> list[ProductHuntProduct]:
         votes_count = int(hit.get("vote_count") or hit.get("votes_count") or 0)
 
         # Düşük oy + alakasız ürünleri filtrele
-        if votes_count < 10:
+        if votes_count < 5:
             continue
-        if _relevance(name, tagline) == 0:
+        if _relevance(name, tagline) == 0 and votes_count < 50:
+            continue
+        if not _has_full_word_match(name, tagline):
             continue
 
         products.append(
@@ -171,52 +180,6 @@ async def _apify_run(actor_id: str, payload: dict) -> list[dict]:
         return items_resp.json()
 
 
-async def _fetch_reddit_apify(topic: str) -> list[RedditNeedPost]:
-    subreddits = os.getenv("REDDIT_SUBREDDITS", "startups,Entrepreneur,SaaS")
-    subreddit_names = [s.strip() for s in subreddits.split(",") if s.strip()]
-
-    queries = [
-        f"{topic} need OR wish OR problem",
-        f"{topic} looking for tool",
-    ]
-
-    items = await _apify_run(
-        "practicaltools/apify-reddit-api",
-        {
-            "searchQueries": queries,
-            "subreddits": subreddit_names,
-            "sort": "top",
-            "time": "month",
-            "maxItems": 30,
-        },
-    )
-
-    out: list[RedditNeedPost] = []
-    seen: set[str] = set()
-    for item in items:
-        title = (item.get("title") or "").strip()
-        selftext = (item.get("selfText") or item.get("body") or "").strip()
-        url = item.get("url") or item.get("permalink") or ""
-        score = int(item.get("score") or item.get("upVotes") or 0)
-        subreddit = item.get("subreddit") or item.get("communityName") or ""
-
-        if not title or url in seen:
-            continue
-
-        ws = _wish_score(f"{title} {selftext}")
-        if ws == 0:
-            continue
-
-        seen.add(url)
-        out.append(RedditNeedPost(
-            title=title,
-            subreddit=subreddit,
-            url=url,
-            score=score * (1 + ws),
-        ))
-
-    out.sort(key=lambda x: x.score, reverse=True)
-    return out[:15]
 
 
 async def _fetch_app_store_reviews(topic: str) -> list[AppStoreReview]:
@@ -273,18 +236,50 @@ def _wish_score(text: str) -> int:
     return sum(1 for r in _WISH_RE if r.search(text))
 
 
+def _topic_score(text: str, topic: str) -> int:
+    tokens = [w for w in re.sub(r"[^a-z0-9 ]", " ", topic.lower()).split() if len(w) >= 4]
+    if not tokens:
+        return 1
+    text_lower = text.lower()
+    return sum(1 for t in tokens if t in text_lower)
+
+
+async def _get_reddit_token() -> str:
+    client_id = os.getenv("REDDIT_CLIENT_ID")
+    client_secret = os.getenv("REDDIT_CLIENT_SECRET")
+    user_agent = os.getenv("REDDIT_USER_AGENT", "grolab-research-bot/0.1")
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            "https://www.reddit.com/api/v1/access_token",
+            auth=(client_id, client_secret),
+            data={"grant_type": "client_credentials"},
+            headers={"User-Agent": user_agent},
+        )
+        resp.raise_for_status()
+        return resp.json()["access_token"]
+
+
 async def _fetch_one_reddit(
-    client: httpx.AsyncClient, sub: str, query: str
+    client: httpx.AsyncClient, sub: str, query: str, token: Optional[str] = None
 ) -> list[RedditNeedPost]:
+    if token:
+        base_url = f"https://oauth.reddit.com/r/{sub}/search.json"
+        headers = {"Authorization": f"bearer {token}", "User-Agent": "grolab-research-bot/0.1"}
+    else:
+        base_url = f"https://www.reddit.com/r/{sub}/search.json"
+        headers = {}
     try:
         resp = await client.get(
-            f"https://www.reddit.com/r/{sub}/search.json",
-            params={"q": query, "sort": "top", "t": "year", "limit": 25, "restrict_sr": 1},
+            base_url,
+            params={"q": f'"{query}"', "sort": "top", "t": "year", "limit": 25, "restrict_sr": 1},
+            headers=headers,
         )
         resp.raise_for_status()
         posts = resp.json().get("data", {}).get("children", [])
     except Exception:
         return []
+
+    logger.debug(f"reddit_fetch sub={sub} query={query!r} fetched={len(posts)} posts")
 
     out: list[RedditNeedPost] = []
     for post in posts:
@@ -293,17 +288,22 @@ async def _fetch_one_reddit(
         selftext = (d.get("selftext") or "").strip()
         permalink = d.get("permalink", "")
         score = int(d.get("score") or 0)
-        ws = _wish_score(f"{title} {selftext}")
+        combined = f"{title} {selftext}"
+        ws = _wish_score(combined)
         if ws == 0:
             continue
+        final_score = int(score * (1 + ws))
+        logger.debug(f"reddit_pass sub={sub} ws={ws} score={final_score} title={title[:80]!r}")
         out.append(
             RedditNeedPost(
                 title=title,
                 subreddit=sub,
                 url=f"https://www.reddit.com{permalink}",
-                score=score * (1 + ws),
+                score=final_score,
             )
         )
+
+    logger.debug(f"reddit_filtered sub={sub} query={query!r} passed={len(out)}/{len(posts)}")
     return out
 
 
@@ -353,6 +353,9 @@ async def _fetch_hn(topic: str) -> list[HNPost]:
                     continue
                 if not _HN_WISH_RE.search(title):
                     continue
+                topic_tokens = [w for w in topic.lower().split() if len(w) >= 4]
+                if topic_tokens and not any(t in title.lower() for t in topic_tokens):
+                    continue
 
                 seen.add(url)
                 posts.append(HNPost(title=title, url=url, score=score, comments=comments))
@@ -361,21 +364,25 @@ async def _fetch_hn(topic: str) -> list[HNPost]:
     return posts[:15]
 
 
-async def _fetch_reddit(topic: str) -> list[RedditNeedPost]:
-    subreddits = os.getenv("REDDIT_SUBREDDITS", "startups,Entrepreneur,SaaS,smallbusiness,webdev,programming")
+async def _fetch_reddit_direct(topic: str) -> list[RedditNeedPost]:
+    subreddits = os.getenv("REDDIT_SUBREDDITS", "SaaS,startups,Entrepreneur")
     subreddit_names = [s.strip() for s in subreddits.split(",") if s.strip()]
     queries = [
-        f"{topic} need OR wish OR problem",
-        f"{topic} looking for tool OR solution",
-        f"{topic} frustrated OR struggling OR annoying",
+        topic,
+        f"{topic} tool",
+        f"{topic} problem",
     ]
 
-    headers = {"User-Agent": "grolab-research-bot/0.1"}
+    try:
+        token: Optional[str] = await _get_reddit_token()
+    except Exception as e:
+        logger.warning(f"reddit_token_failed error={e}")
+        token = None
     results: list[RedditNeedPost] = []
 
-    async with httpx.AsyncClient(timeout=10, headers=headers) as client:
+    async with httpx.AsyncClient(timeout=10, headers={"User-Agent": "grolab-research-bot/0.1"}) as client:
         tasks = [
-            _fetch_one_reddit(client, sub, query)
+            _fetch_one_reddit(client, sub, query, token)
             for sub in subreddit_names
             for query in queries
         ]
@@ -394,50 +401,113 @@ async def _fetch_reddit(topic: str) -> list[RedditNeedPost]:
     return unique[:20]
 
 
+async def _enrich_reddit_scores(posts: list[RedditNeedPost]) -> list[RedditNeedPost]:
+    """Fetch real upvote scores for Reddit posts via the .json API."""
+    async def _fetch_score(post: RedditNeedPost) -> RedditNeedPost:
+        try:
+            async with httpx.AsyncClient(timeout=5, headers={"User-Agent": "grolab-research-bot/0.1"}) as client:
+                resp = await asyncio.wait_for(
+                    client.get(f"{post.url}.json"),
+                    timeout=5,
+                )
+                resp.raise_for_status()
+                score = resp.json()[0]["data"]["children"][0]["data"]["score"]
+                return post.model_copy(update={"score": int(score)})
+        except Exception:
+            return post
+
+    enriched = await asyncio.gather(*[_fetch_score(p) for p in posts], return_exceptions=True)
+    return [p if not isinstance(p, Exception) else posts[i] for i, p in enumerate(enriched)]
+
+
+async def _fetch_reddit(topic: str) -> list[RedditNeedPost]:
+    """Search Reddit posts via Google site search using SerpApi."""
+    api_key = os.getenv("SERPAPI_API_KEY")
+    if not api_key:
+        return await _fetch_reddit_direct(topic)
+
+    def _search_sync():
+        from serpapi import GoogleSearch
+        results = []
+        queries = [
+            f'site:reddit.com "{topic}" (need OR problem OR frustrated OR looking for)',
+            f'site:reddit.com "{topic}" tool OR software OR alternative',
+        ]
+        for q in queries:
+            search = GoogleSearch({"q": q, "api_key": api_key, "num": 15})
+            data = search.get_dict()
+            for r in data.get("organic_results", []):
+                results.append({
+                    "title": r.get("title", ""),
+                    "url": r.get("link", ""),
+                    "snippet": r.get("snippet", ""),
+                })
+        return results
+
+    items = await asyncio.to_thread(_search_sync)
+
+    out: list[RedditNeedPost] = []
+    seen: set[str] = set()
+    for item in items:
+        title = item["title"].replace(" : ", " - ")
+        url = item["url"]
+        if not title or url in seen or "reddit.com" not in url:
+            continue
+        subreddit = ""
+        m = re.search(r"reddit\.com/r/([^/]+)", url)
+        if m:
+            subreddit = m.group(1)
+        seen.add(url)
+        out.append(RedditNeedPost(title=title, subreddit=subreddit, url=url, score=0))
+
+    out = await _enrich_reddit_scores(out[:20])
+    out.sort(key=lambda x: x.score, reverse=True)
+    return out
+
+
+
 def _fetch_google_trends_sync(topic: str) -> list[TrendKeyword]:
     api_key = os.getenv("SERPAPI_API_KEY")
     if not api_key:
         raise RuntimeError("SERPAPI_API_KEY is missing")
 
-    params = {
-        "engine": "google_trends",
-        "q": topic,
-        "data_type": "RELATED_QUERIES",
-        "api_key": api_key,
-    }
+    queries = [
+        f"{topic} software",
+        f"{topic} tool",
+        f"best {topic} alternatives",
+    ]
 
-    search = GoogleSearch(params)
-    data = search.get_dict()
+    tokens = [w for w in topic.lower().split() if len(w) >= 4]
+    seen: set[str] = set()
+    results: list[TrendKeyword] = []
 
-    ranked: list[TrendKeyword] = []
-    related_queries = data.get("related_queries", {})
-    rising = related_queries.get("rising", [])
+    for q in queries:
+        search = GoogleSearch({"q": q, "api_key": api_key, "num": 10})
+        data = search.get_dict()
+        for item in data.get("related_searches", []):
+            kw = str(item.get("query") or "").strip()
+            if not kw or kw in seen:
+                continue
+            if tokens and not any(t in kw.lower() for t in tokens):
+                continue
+            seen.add(kw)
+            results.append(TrendKeyword(keyword=kw, value="related"))
 
-    for item in rising:
-        keyword = str(item.get("query") or "").strip()
-        value = str(item.get("value") or "").strip()
-        if not keyword:
-            continue
-        ranked.append(TrendKeyword(keyword=keyword, value=value))
+        for item in data.get("related_questions", []):
+            kw = str(item.get("question") or "").strip()
+            if not kw or kw in seen:
+                continue
+            seen.add(kw)
+            results.append(TrendKeyword(keyword=kw, value="question"))
 
-    # Hem rising hem top sinyalleri al
-    top = related_queries.get("top", [])
-    for item in top:
-        keyword = str(item.get("query") or "").strip()
-        value = str(item.get("value") or "").strip()
-        if not keyword:
-            continue
-        if not any(kw.keyword == keyword for kw in ranked):
-            ranked.append(TrendKeyword(keyword=keyword, value=value))
-
-    return ranked[:15]
+    return results[:15]
 
 
 async def _fetch_google_trends(topic: str) -> list[TrendKeyword]:
     try:
         return await asyncio.wait_for(
             asyncio.to_thread(_fetch_google_trends_sync, topic),
-            timeout=15,
+            timeout=25,
         )
     except asyncio.TimeoutError:
         logger.warning(f"google_trends_timeout topic={topic}")
@@ -464,7 +534,6 @@ async def research_market(
     is_pro = plan in ("pro", "enterprise")
     logger.info(f"market_research_started topic={topic} request_id={req_id} plan={plan} apify={_use_apify()}")
 
-    reddit_fetcher = _fetch_reddit_apify if _use_apify() else _fetch_reddit
     app_store_fetcher = (_fetch_app_store_reviews if _use_apify() else None) if is_pro else None
 
     async def _tracked(coro, step: str, label: str):
@@ -476,9 +545,9 @@ async def research_market(
 
     all_tasks: tuple = (
         _tracked(_fetch_product_hunt(topic), "producthunt_done", "Product Hunt"),
-        _tracked(reddit_fetcher(topic), "reddit_done", "Reddit"),
+        _tracked(_fetch_reddit(topic), "reddit_done", "Reddit"),
         _tracked(_fetch_google_trends(topic), "trends_done", "Google Trends"),
-        *((_tracked(_fetch_hn(topic), "hn_done", "Hacker News"),) if is_pro else ()),
+        _tracked(_fetch_hn(topic), "hn_done", "Hacker News"),
         *((_tracked(app_store_fetcher(topic), "appstore_done", "App Store"),) if app_store_fetcher else ()),
     )
 
@@ -512,19 +581,15 @@ async def research_market(
         source_errors.append("google_trends_unavailable")
         trend_keywords = []
 
-    # Pro-only sources — indices shift based on how many tasks were added
-    next_idx = 3
-    if is_pro:
-        try:
-            hn_posts = _result_or_raise(results[next_idx])
-        except Exception as error:
-            logger.warning(f"market_research_hn_failed error={error} request_id={req_id}")
-            source_errors.append("hn_unavailable")
-        next_idx += 1
+    try:
+        hn_posts = _result_or_raise(results[3])
+    except Exception as error:
+        logger.warning(f"market_research_hn_failed error={error} request_id={req_id}")
+        source_errors.append("hn_unavailable")
 
-    if app_store_fetcher and len(results) > next_idx:
+    if app_store_fetcher and len(results) > 4:
         try:
-            app_store_reviews = _result_or_raise(results[next_idx])
+            app_store_reviews = _result_or_raise(results[4])
         except Exception as error:
             logger.warning(f"market_research_appstore_failed error={error} request_id={req_id}")
             source_errors.append("app_store_unavailable")

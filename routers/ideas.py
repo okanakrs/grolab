@@ -90,6 +90,7 @@ async def get_idea_history(
 async def stream_ideas(
     topic: str = Query(default=""),
     idea_count: int = Query(default=3, ge=1, le=3),
+    lang: str = Query(default="tr"),
     x_user_id: Optional[str] = Header(default=None),
     x_guest_token: Optional[str] = Header(default=None),
 ) -> StreamingResponse:
@@ -130,6 +131,7 @@ async def stream_ideas(
                 idea_count,
                 on_progress=_on_progress,
                 plan=plan,
+                lang=lang,
             )
             if is_guest:
                 await increment_guest_count(x_guest_token)

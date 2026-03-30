@@ -268,10 +268,12 @@ export type ProgressEvent =
 export async function* generateIdeasStream(
   topic: string,
   ideaCount: number,
+  lang: string = "tr",
 ): AsyncGenerator<ProgressEvent> {
   const params = new URLSearchParams({
     topic,
     idea_count: String(ideaCount),
+    lang,
   });
 
   const controller = new AbortController();

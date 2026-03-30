@@ -120,7 +120,7 @@ function HeroMockup() {
 
 export function Hero() {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const th = t.hero;
 
   const [isGenerating, setIsGenerating] = useState(false);
@@ -199,7 +199,7 @@ export function Hero() {
     setGenerateError(null);
 
     try {
-      for await (const event of generateIdeasStream(topic.trim(), ideaCount)) {
+      for await (const event of generateIdeasStream(topic.trim(), ideaCount, lang)) {
         if (event.step === "error") {
           if (event.status === 402) { router.push("/pricing"); return; }
           if (event.status === 403) { setShowGuestModal(true); return; }

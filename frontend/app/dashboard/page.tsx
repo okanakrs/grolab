@@ -171,12 +171,12 @@ export default function DashboardPage() {
                         onClick={() => setSelected({ idea, accent: ac })}
                         className="group flex flex-col items-start gap-2 rounded-xl border border-white/[0.05] bg-white/[0.02] p-4 text-left transition hover:border-white/[0.1] hover:bg-white/[0.04]"
                       >
-                        <div className="flex w-full items-start justify-between gap-2">
+                        <div className="flex w-full flex-col gap-1.5">
+                          <span className={`self-start rounded-full border px-2 py-0.5 text-[10px] font-semibold truncate max-w-full ${ac.mrr}`}>
+                            {idea.tahmini_mrr_potansiyeli.split("(")[0].trim()}
+                          </span>
                           <span className="text-sm font-semibold text-white leading-snug line-clamp-2">
                             {idea.isim}
-                          </span>
-                          <span className={`mt-0.5 flex-shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${ac.mrr}`}>
-                            {idea.tahmini_mrr_potansiyeli.split("-")[0].trim()}
                           </span>
                         </div>
                         <p className="text-xs leading-relaxed text-zinc-500 line-clamp-2">{idea.problem}</p>

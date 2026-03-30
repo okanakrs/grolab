@@ -36,6 +36,11 @@ logger = logging.getLogger("grolab.api")
 
 app = FastAPI(title="GroLab API", version="0.1.0")
 
+app.include_router(discovery_router, prefix="/api")
+app.include_router(billing_router, prefix="/api")
+app.include_router(ideas_router, prefix="/api")
+app.include_router(tools_router, prefix="/api")
+
 import os as _os
 
 _cors_extra = _os.getenv("CORS_ORIGINS", "")
@@ -43,6 +48,8 @@ _cors_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "https://grolab.vercel.app",
+    "https://grolab.app",
+    "https://www.grolab.app",
     *[o.strip() for o in _cors_extra.split(",") if o.strip()],
 ]
 
@@ -54,12 +61,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-app.include_router(discovery_router, prefix="/api")
-app.include_router(billing_router, prefix="/api")
-app.include_router(ideas_router, prefix="/api")
-app.include_router(tools_router, prefix="/api")
 
 
 @app.middleware("http")
