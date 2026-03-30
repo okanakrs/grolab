@@ -39,6 +39,7 @@ interface Props {
   ideas: SaaSIdea[];
   evidence: IdeaGenerationResponse;
   userPlan: string;
+  lang?: string;
   th: {
     ideasGenerated: (n: number) => string;
     marketSupported: string;
@@ -49,7 +50,28 @@ interface Props {
   };
 }
 
-export function IdeaPanel({ ideas, evidence, userPlan, th }: Props) {
+function ExpandableText({ text, lang }: { text: string; lang?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isEN = lang === "en";
+  return (
+    <div>
+      <p className={`mt-2 text-sm leading-relaxed text-zinc-300${expanded ? "" : " line-clamp-4"}`}>
+        {text}
+      </p>
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="mt-1 text-[11px] font-medium text-emerald-400 transition hover:text-emerald-300"
+      >
+        {expanded
+          ? (isEN ? "Show less ↑" : "Gizle ↑")
+          : (isEN ? "Show more →" : "Devamını gör →")}
+      </button>
+    </div>
+  );
+}
+
+export function IdeaPanel({ ideas, evidence, userPlan, lang, th }: Props) {
   const [active, setActive] = useState(0);
   const idea = ideas[active];
   const ac = ACCENTS[active % ACCENTS.length];
@@ -137,13 +159,13 @@ export function IdeaPanel({ ideas, evidence, userPlan, th }: Props) {
                 <p className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${ac.label}`}>
                   {th.solution}
                 </p>
-                <p className="mt-2 text-sm leading-relaxed text-zinc-300 line-clamp-5">{idea.cozum}</p>
+                <ExpandableText text={idea.cozum} lang={lang} />
               </div>
               <div>
                 <p className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${ac.label}`}>
                   {th.targetAudience}
                 </p>
-                <p className="mt-2 text-sm leading-relaxed text-zinc-300">{idea.hedef_kitle}</p>
+                <ExpandableText text={idea.hedef_kitle} lang={lang} />
                 <div className={`mt-4 h-px ${ac.divider}`} />
                 <p className={`mt-4 text-[10px] font-semibold uppercase tracking-[0.2em] ${ac.label}`}>
                   {th.estimatedMRR}

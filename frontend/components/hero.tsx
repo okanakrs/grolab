@@ -424,7 +424,7 @@ export function Hero() {
         <GenerationErrorState message={generateError.message} requestId={generateError.requestId} onRetry={onGenerate} />
       )}
       {ideas.length > 0 && (
-        <IdeaPanel ideas={ideas} evidence={evidence} userPlan={userPlan} th={th} />
+        <IdeaPanel ideas={ideas} evidence={evidence} userPlan={userPlan} lang={lang} th={th} />
       )}
     </motion.section>
 

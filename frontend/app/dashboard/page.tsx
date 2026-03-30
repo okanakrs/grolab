@@ -15,6 +15,26 @@ const ACCENTS = [
   { dot: "bg-violet-400", mrr: "border-violet-500/25 bg-violet-500/[0.08] text-violet-400", label: "text-violet-500/60", divider: "bg-violet-500/10", glow: "shadow-[0_0_40px_-20px_rgba(139,92,246,0.35)]" },
 ];
 
+function ExpandableText({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const { lang } = useLanguage();
+  const isEN = lang === "en";
+  return (
+    <div>
+      <p className={`mt-2 text-sm leading-relaxed text-zinc-300${expanded ? "" : " line-clamp-4"}`}>
+        {text}
+      </p>
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="mt-1 text-[11px] font-medium text-emerald-400 transition hover:text-emerald-300"
+      >
+        {expanded ? (isEN ? "Show less ↑" : "Gizle ↑") : (isEN ? "Show more →" : "Devamını gör →")}
+      </button>
+    </div>
+  );
+}
+
 function IdeaDetailModal({ idea, onClose, accent, userPlan, td }: {
   idea: SaaSIdea;
   onClose: () => void;
@@ -52,11 +72,11 @@ function IdeaDetailModal({ idea, onClose, accent, userPlan, td }: {
         <div className="grid gap-5 sm:grid-cols-2">
           <div>
             <p className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${accent.label}`}>{td.solution}</p>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-300">{idea.cozum}</p>
+            <ExpandableText text={idea.cozum} />
           </div>
           <div>
             <p className={`text-[10px] font-semibold uppercase tracking-[0.2em] ${accent.label}`}>{td.targetAudience}</p>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-300">{idea.hedef_kitle}</p>
+            <ExpandableText text={idea.hedef_kitle} />
           </div>
         </div>
 
