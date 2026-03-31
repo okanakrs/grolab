@@ -1,4 +1,5 @@
 # GroLab — AI-Powered SaaS Idea Generator
+www.grolab.app
 
 Gerçek zamanlı pazar verilerini analiz ederek uygulanabilir SaaS fikirleri üreten bir platform.
 
