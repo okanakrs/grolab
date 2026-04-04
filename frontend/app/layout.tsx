@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { LanguageProvider } from "../contexts/language-context";
 import { Footer } from "../components/footer";
 import "./globals.css";
@@ -45,6 +46,7 @@ export default function RootLayout({
           {children}
           <Footer />
         </LanguageProvider>
+        <Analytics />
       </body>
     </html>
   );
