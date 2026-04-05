@@ -60,26 +60,46 @@ export default function PricingPage() {
   const { t } = useLanguage();
   const tp = t.pricing;
 
-  // Load Paddle.js and initialize
+  // Load Paddle.js and initialize with eventCallback (v2 API)
   useEffect(() => {
     const clientToken = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN;
     if (!clientToken || paddleReady.current) return;
 
+    const init = () => {
+      if (!window.Paddle) return;
+      if (process.env.NEXT_PUBLIC_PADDLE_ENV !== "production") {
+        window.Paddle.Environment.set("sandbox");
+      }
+      window.Paddle.Initialize({
+        token: clientToken,
+        eventCallback: (event: { name: string }) => {
+          if (event.name === "checkout.completed") {
+            setIsLoading(null);
+            window.location.href = "/pricing?checkout=success";
+          }
+          if (event.name === "checkout.closed") {
+            setIsLoading(null);
+          }
+          if (event.name === "checkout.error") {
+            setIsLoading(null);
+          }
+        },
+      });
+      paddleReady.current = true;
+    };
+
+    if (window.Paddle) {
+      init();
+      return;
+    }
+
     const script = document.createElement("script");
     script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
     script.async = true;
-    script.onload = () => {
-      if (window.Paddle) {
-        window.Paddle.Environment.set(
-          process.env.NEXT_PUBLIC_PADDLE_ENV === "production" ? "production" : "sandbox"
-        );
-        window.Paddle.Initialize({ token: clientToken });
-        paddleReady.current = true;
-      }
-    };
+    script.onload = init;
     document.head.appendChild(script);
     return () => {
-      document.head.removeChild(script);
+      if (document.head.contains(script)) document.head.removeChild(script);
     };
   }, []);
 
@@ -97,29 +117,20 @@ export default function PricingPage() {
         ? (isYearly ? process.env.NEXT_PUBLIC_PADDLE_PRICE_PRO_YEARLY : process.env.NEXT_PUBLIC_PADDLE_PRICE_PRO)
         : (isYearly ? process.env.NEXT_PUBLIC_PADDLE_PRICE_ENTERPRISE_YEARLY : process.env.NEXT_PUBLIC_PADDLE_PRICE_ENTERPRISE);
 
-    if (!priceId || !window.Paddle) return;
+    if (!priceId || !window.Paddle) {
+      console.error("Paddle not ready or price ID missing", { priceId, paddle: !!window.Paddle });
+      return;
+    }
 
     setIsLoading(plan);
 
     window.Paddle.Checkout.open({
       items: [{ priceId, quantity: 1 }],
-      customData: userId ? { user_id: userId } : undefined,
+      ...(userId ? { customData: { user_id: userId } } : {}),
       settings: {
         displayMode: "overlay",
         theme: "dark",
         locale: "en",
-      },
-      events: {
-        onCompleted: () => {
-          setIsLoading(null);
-          window.location.href = "/pricing?checkout=success";
-        },
-        onClose: () => {
-          setIsLoading(null);
-        },
-        onError: () => {
-          setIsLoading(null);
-        },
       },
     });
   };
