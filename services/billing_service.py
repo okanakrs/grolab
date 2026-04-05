@@ -121,8 +121,9 @@ async def apply_plan_credits(user_id: Optional[str], plan: str) -> CreditSnapsho
         sb = get_supabase()
 
         def _update() -> None:
+            from datetime import datetime, timezone
             sb.table("profiles").update(
-                {"plan": plan_key, "credits_total": total, "credits_remaining": total}
+                {"plan": plan_key, "credits_total": total, "credits_remaining": total, "updated_at": datetime.now(timezone.utc).isoformat()}
             ).eq("id", uid).execute()
 
         await asyncio.to_thread(_update)
