@@ -1,9 +1,11 @@
 import asyncio
+import hashlib
+import hmac
+import json
 import logging
 import os
 from typing import Optional
 
-import stripe
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel
 
@@ -11,14 +13,6 @@ from services.billing_service import apply_plan_credits, get_credit_snapshot
 
 router = APIRouter(tags=["billing"])
 logger = logging.getLogger("grolab.router.billing")
-
-
-class CheckoutRequest(BaseModel):
-    plan: str
-
-
-class CheckoutResponse(BaseModel):
-    checkout_url: str
 
 
 class CreditsResponse(BaseModel):
@@ -34,26 +28,48 @@ def _get_user_id(x_user_id: Optional[str]) -> str:
     return x_user_id.strip() or "demo-user"
 
 
+def _verify_paddle_signature(payload: bytes, signature_header: str, secret: str) -> bool:
+    """Paddle webhook signature verification (HMAC-SHA256)."""
+    try:
+        parts = dict(part.split("=", 1) for part in signature_header.split(";"))
+        ts = parts.get("ts", "")
+        h1 = parts.get("h1", "")
+        signed_payload = f"{ts}:{payload.decode('utf-8')}"
+        expected = hmac.new(secret.encode("utf-8"), signed_payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, h1)
+    except Exception:
+        return False
+
+
+def _plan_from_price_id(price_id: str) -> str:
+    """Map Paddle price ID to internal plan name."""
+    if price_id in {os.getenv("PADDLE_PRICE_PRO", ""), os.getenv("PADDLE_PRICE_PRO_YEARLY", "")}:
+        return "pro"
+    if price_id in {os.getenv("PADDLE_PRICE_ENTERPRISE", ""), os.getenv("PADDLE_PRICE_ENTERPRISE_YEARLY", "")}:
+        return "enterprise"
+    return "free"
+
+
 async def _upsert_subscription(
     user_id: str,
     plan: str,
-    stripe_customer_id: Optional[str],
-    stripe_subscription_id: Optional[str],
+    paddle_customer_id: Optional[str],
+    paddle_subscription_id: Optional[str],
 ) -> None:
     from services.supabase_client import get_supabase
 
     sb = get_supabase()
 
     def _upsert() -> None:
-        sb.table("stripe_subscriptions").upsert(
+        sb.table("paddle_subscriptions").upsert(
             {
                 "user_id": user_id,
                 "plan": plan,
                 "status": "active",
-                "stripe_customer_id": stripe_customer_id,
-                "stripe_subscription_id": stripe_subscription_id,
+                "paddle_customer_id": paddle_customer_id,
+                "paddle_subscription_id": paddle_subscription_id,
             },
-            on_conflict="stripe_subscription_id",
+            on_conflict="paddle_subscription_id",
         ).execute()
 
     try:
@@ -73,78 +89,40 @@ async def get_credits(x_user_id: Optional[str] = Header(default=None)) -> Credit
     )
 
 
-@router.post("/checkout", response_model=CheckoutResponse)
-async def create_checkout_session(
-    payload: CheckoutRequest,
-    x_user_id: Optional[str] = Header(default=None),
-) -> CheckoutResponse:
-    stripe_secret = os.getenv("STRIPE_SECRET_KEY")
-    if not stripe_secret:
-        raise HTTPException(status_code=500, detail="Missing STRIPE_SECRET_KEY")
-
-    if payload.plan not in {"pro", "enterprise"}:
-        raise HTTPException(status_code=400, detail="Plan must be pro or enterprise")
-
-    price_env_key = "STRIPE_PRICE_PRO" if payload.plan == "pro" else "STRIPE_PRICE_ENTERPRISE"
-    price_id = os.getenv(price_env_key)
-    if not price_id:
-        raise HTTPException(status_code=500, detail=f"Missing {price_env_key}")
-
-    stripe.api_key = stripe_secret
-
-    frontend_url = os.getenv("FRONTEND_BASE_URL", "http://127.0.0.1:3000")
-    user_id = _get_user_id(x_user_id)
-
-    try:
-        session = stripe.checkout.Session.create(
-            mode="subscription",
-            line_items=[{"price": price_id, "quantity": 1}],
-            success_url=f"{frontend_url}/pricing?checkout=success",
-            cancel_url=f"{frontend_url}/pricing?checkout=cancel",
-            metadata={
-                "user_id": user_id,
-                "plan": payload.plan,
-            },
-        )
-    except Exception as error:
-        logger.exception(f"checkout_session_create_failed user_id={user_id}")
-        raise HTTPException(status_code=500, detail="Failed to create Stripe session") from error
-
-    checkout_url = session.get("url")
-    if not checkout_url:
-        raise HTTPException(status_code=500, detail="Stripe did not return checkout URL")
-
-    return CheckoutResponse(checkout_url=checkout_url)
-
-
 @router.post("/webhook")
-async def stripe_webhook(request: Request) -> dict[str, bool]:
-    stripe_secret = os.getenv("STRIPE_SECRET_KEY")
-    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
-
-    if not stripe_secret or not webhook_secret:
-        raise HTTPException(status_code=500, detail="Stripe webhook secrets are missing")
-
-    stripe.api_key = stripe_secret
+async def paddle_webhook(request: Request) -> dict[str, bool]:
+    webhook_secret = os.getenv("PADDLE_WEBHOOK_SECRET")
+    if not webhook_secret:
+        raise HTTPException(status_code=500, detail="Missing PADDLE_WEBHOOK_SECRET")
 
     payload = await request.body()
-    sig_header = request.headers.get("stripe-signature")
+    signature_header = request.headers.get("paddle-signature", "")
+
+    if not _verify_paddle_signature(payload, signature_header, webhook_secret):
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
 
     try:
-        event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
-    except ValueError as error:
+        event = json.loads(payload)
+    except json.JSONDecodeError as error:
         raise HTTPException(status_code=400, detail="Invalid webhook payload") from error
-    except stripe.error.SignatureVerificationError as error:
-        raise HTTPException(status_code=400, detail="Invalid webhook signature") from error
 
-    if event.get("type") == "checkout.session.completed":
-        session = event.get("data", {}).get("object", {})
-        metadata = session.get("metadata", {})
-        user_id = metadata.get("user_id", "demo-user")
-        plan = metadata.get("plan", "free")
+    event_type = event.get("event_type", "")
+    logger.info(f"paddle_webhook event_type={event_type}")
+
+    # Handle completed transaction (one-time or first subscription payment)
+    if event_type == "transaction.completed":
+        data = event.get("data", {})
+        custom_data = data.get("custom_data") or {}
+        user_id = custom_data.get("user_id", "demo-user")
+
+        # Get plan from the first line item's price ID
+        items = data.get("items", [])
+        price_id = items[0].get("price", {}).get("id", "") if items else ""
+        plan = _plan_from_price_id(price_id)
+
         snapshot = await apply_plan_credits(user_id, plan)
         logger.info(
-            "checkout_completed user_id=%s plan=%s credits=%s",
+            "transaction_completed user_id=%s plan=%s credits=%s",
             snapshot.user_id,
             snapshot.plan,
             snapshot.credits_remaining,
@@ -154,8 +132,18 @@ async def stripe_webhook(request: Request) -> dict[str, bool]:
             await _upsert_subscription(
                 user_id=user_id,
                 plan=plan,
-                stripe_customer_id=session.get("customer"),
-                stripe_subscription_id=session.get("subscription"),
+                paddle_customer_id=data.get("customer_id"),
+                paddle_subscription_id=data.get("subscription_id"),
             )
+
+    # Handle subscription renewal
+    elif event_type == "subscription.activated":
+        data = event.get("data", {})
+        custom_data = data.get("custom_data") or {}
+        user_id = custom_data.get("user_id", "demo-user")
+        items = data.get("items", [])
+        price_id = items[0].get("price", {}).get("id", "") if items else ""
+        plan = _plan_from_price_id(price_id)
+        await apply_plan_credits(user_id, plan)
 
     return {"received": True}

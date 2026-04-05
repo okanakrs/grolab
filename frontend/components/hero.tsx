@@ -122,6 +122,7 @@ export function Hero() {
   const router = useRouter();
   const { t, lang } = useLanguage();
   const th = t.hero;
+  const tr = t.research;
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [topic, setTopic] = useState("");
@@ -173,13 +174,13 @@ export function Hero() {
   );
 
   const STEP_META: Record<string, { icon: React.ReactNode; label: string }> = {
-    research_start:   { icon: <Search size={16} color="#71717a" strokeWidth={1.75} />, label: "Pazar araştırması başlıyor..." },
-    reddit_done:      { icon: favicon("https://www.reddit.com/favicon.ico"),           label: "Reddit tarıyorum..." },
-    hn_done:          { icon: favicon("https://news.ycombinator.com/favicon.ico"),     label: "Hacker News analiz ediyorum..." },
-    producthunt_done: { icon: favicon("https://ph-static.imgix.net/ph-favicon.ico"),   label: "Product Hunt tarıyorum..." },
-    trends_done:      { icon: favicon("https://www.google.com/favicon.ico"),           label: "Google Trends analiz ediyorum..." },
-    appstore_done:    { icon: favicon("https://www.apple.com/favicon.ico"),            label: "App Store inceliyorum..." },
-    llm_start:        { icon: <Sparkles size={16} color="#71717a" strokeWidth={1.75} />, label: "Fırsat skoru hesaplanıyor..." },
+    research_start:   { icon: <Search size={16} color="#71717a" strokeWidth={1.75} />, label: tr.steps.research_start },
+    reddit_done:      { icon: favicon("https://www.reddit.com/favicon.ico"),           label: tr.steps.reddit_done },
+    hn_done:          { icon: favicon("https://news.ycombinator.com/favicon.ico"),     label: tr.steps.hn_done },
+    producthunt_done: { icon: favicon("https://ph-static.imgix.net/ph-favicon.ico"),   label: tr.steps.producthunt_done },
+    trends_done:      { icon: favicon("https://www.google.com/favicon.ico"),           label: tr.steps.trends_done },
+    appstore_done:    { icon: favicon("https://www.apple.com/favicon.ico"),            label: tr.steps.appstore_done },
+    llm_start:        { icon: <Sparkles size={16} color="#71717a" strokeWidth={1.75} />, label: tr.steps.llm_start },
   };
 
   const onGenerate = async () => {
@@ -190,8 +191,8 @@ export function Hero() {
       isPro
         ? []
         : [
-            { id: "hn_done",       icon: favicon("https://news.ycombinator.com/favicon.ico"), label: "Hacker News analizi",   status: "pending", locked: true },
-            { id: "appstore_done", icon: favicon("https://www.apple.com/favicon.ico"),            label: "App Store incelemeleri", status: "pending", locked: true },
+            { id: "hn_done",       icon: favicon("https://news.ycombinator.com/favicon.ico"), label: tr.lockedLabels.hn_done,       status: "pending", locked: true },
+            { id: "appstore_done", icon: favicon("https://www.apple.com/favicon.ico"),            label: tr.lockedLabels.appstore_done, status: "pending", locked: true },
           ]
     );
     setIdeas([]);
@@ -215,7 +216,7 @@ export function Hero() {
         // progress event
         const meta = STEP_META[event.step];
         if (!meta) continue;
-        const detail = event.count > 0 ? `${event.count} sonuç bulundu` : undefined;
+        const detail = event.count > 0 ? tr.resultsFound(event.count) : undefined;
         setResearchSteps((prev) => {
           const existing = prev.find((s) => s.id === event.step);
           if (existing) {
@@ -364,7 +365,7 @@ export function Hero() {
 
           <div className="mt-5 flex items-center justify-end gap-3">
             <div className="flex items-center gap-2">
-              <span className="select-none text-xs font-medium text-zinc-600">Fikir sayısı</span>
+              <span className="select-none text-xs font-medium text-zinc-600">{tr.ideaCount}</span>
               <div className="flex items-center rounded-lg border border-zinc-800 bg-zinc-900 p-0.5">
                 {[1, 2, 3].map((n) => {
                   const isPro = userPlan === "pro" || userPlan === "enterprise";
@@ -411,7 +412,7 @@ export function Hero() {
           <div className="border-t border-white/[0.04] bg-black/30 px-5 py-2.5">
             <p className="font-mono text-[11px] text-zinc-700">
               {isGenerating
-                ? `⟳  ${researchSteps.find(s => s.status === "active")?.label ?? "Başlatılıyor..."}`
+                ? `⟳  ${researchSteps.find(s => s.status === "active")?.label ?? tr.starting}`
                 : th.statusReady}
             </p>
           </div>
@@ -419,7 +420,7 @@ export function Hero() {
       </motion.div>
 
       {/* Dynamic area */}
-      {isGenerating && <DeepResearchProgress steps={researchSteps} />}
+      {isGenerating && <DeepResearchProgress steps={researchSteps} panelTitle={tr.panelTitle} />}
       {generateError && (
         <GenerationErrorState message={generateError.message} requestId={generateError.requestId} onRetry={onGenerate} />
       )}

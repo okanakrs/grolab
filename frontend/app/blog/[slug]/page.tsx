@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Navbar } from "../../../components/navbar";
 import { useLanguage } from "../../../contexts/language-context";
+import { blogContent } from "../../../lib/blog-content";
 
 const CATEGORY_COLORS: Record<string, string> = {
   Rehber: "border-emerald-500/25 bg-emerald-500/10 text-emerald-400",
@@ -31,17 +32,12 @@ export default function BlogPostPage({
   params: { slug: string };
 }) {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const tb = t.blog;
 
-  const featuredSlug = tb.featuredPost.title
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "");
-
   const post =
-    params.slug === featuredSlug
-      ? { ...tb.featuredPost, slug: featuredSlug }
+    params.slug === tb.featuredPost.slug
+      ? { ...tb.featuredPost }
       : tb.posts.find((p) => p.slug === params.slug) ?? null;
 
   useEffect(() => {
@@ -51,6 +47,8 @@ export default function BlogPostPage({
   }, [post, router]);
 
   if (!post) return null;
+
+  const content = blogContent[params.slug]?.[lang] ?? null;
 
   return (
     <>
@@ -119,9 +117,50 @@ export default function BlogPostPage({
           {/* Divider */}
           <div className="my-10 border-t border-white/[0.06]" />
 
-          {/* Content placeholder */}
-          <div className="prose prose-invert prose-zinc max-w-none text-zinc-400">
-            <p>{post.excerpt}</p>
+          {/* Article content */}
+          {content ? (
+            <article className="space-y-8">
+              {content.sections.map((section, i) => (
+                <section key={i}>
+                  {section.heading && (
+                    <h2 className="mb-4 text-xl font-bold text-white">
+                      {section.heading}
+                    </h2>
+                  )}
+                  <div className="space-y-4">
+                    {section.body.map((paragraph, j) => (
+                      <p key={j} className="text-base leading-relaxed text-zinc-400">
+                        {paragraph}
+                      </p>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </article>
+          ) : (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-6 py-10 text-center">
+              <p className="text-sm text-zinc-500">
+                {lang === "tr" ? "İçerik yakında eklenecek." : "Content coming soon."}
+              </p>
+            </div>
+          )}
+
+          {/* Footer CTA */}
+          <div className="mt-16 rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.03] to-transparent p-8 text-center">
+            <h2 className="text-lg font-bold text-white">
+              {lang === "tr" ? "Kendi SaaS fikrinizi üretin" : "Generate your own SaaS idea"}
+            </h2>
+            <p className="mt-2 text-sm text-zinc-500">
+              {lang === "tr"
+                ? "Google Trends, Product Hunt ve Reddit verisiyle doğrulanmış fikirler."
+                : "Ideas validated with Google Trends, Product Hunt, and Reddit data."}
+            </p>
+            <Link
+              href="/"
+              className="mt-5 inline-block rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 px-6 py-2.5 text-sm font-semibold text-black shadow-lg shadow-emerald-500/20 transition hover:brightness-110"
+            >
+              {lang === "tr" ? "AI ile Üret →" : "Generate with AI →"}
+            </Link>
           </div>
         </div>
       </main>

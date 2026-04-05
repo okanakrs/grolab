@@ -60,6 +60,25 @@ export const translations = {
         { label: "Claude ile optimize ediliyor", sub: "3.5 Sonnet ile SaaS konsepti şekilleniyor" },
       ],
     },
+    research: {
+      panelTitle: "Araştırılıyor",
+      starting: "Başlatılıyor...",
+      ideaCount: "Fikir sayısı",
+      resultsFound: (n: number) => `${n} sonuç bulundu`,
+      steps: {
+        research_start: "Pazar araştırması başlıyor...",
+        reddit_done: "Reddit tarıyorum...",
+        hn_done: "Hacker News analiz ediyorum...",
+        producthunt_done: "Product Hunt tarıyorum...",
+        trends_done: "Google Trends analiz ediyorum...",
+        appstore_done: "App Store inceliyorum...",
+        llm_start: "Fırsat skoru hesaplanıyor...",
+      },
+      lockedLabels: {
+        hn_done: "Hacker News analizi",
+        appstore_done: "App Store incelemeleri",
+      },
+    },
     error: {
       title: "Üretim sırasında bir sorun oluştu",
       requestId: "İstek ID:",
@@ -227,6 +246,7 @@ export const translations = {
         category: "Rehber",
         readTime: "8 dk",
         date: "25 Mart 2026",
+        slug: "ai-ile-saas-fikri-uretimi-rehberi",
         title: "AI ile SaaS Fikri Nasıl Üretilir? Adım Adım Pazar Araştırması Rehberi",
         excerpt:
           "Google Trends, Product Hunt ve Reddit verilerini birleştirerek gerçek pazar sorunlarına dayanan SaaS fikirleri üretmenin tam yöntemi. Başarılı bir SaaS'ın temelinde daima doğrulanmış bir problem yatar.",
@@ -617,6 +637,25 @@ export const translations = {
         { label: "Optimizing with Claude", sub: "Shaping SaaS concept with 3.5 Sonnet" },
       ],
     },
+    research: {
+      panelTitle: "Researching",
+      starting: "Starting...",
+      ideaCount: "Ideas",
+      resultsFound: (n: number) => `${n} results found`,
+      steps: {
+        research_start: "Starting market research...",
+        reddit_done: "Scanning Reddit...",
+        hn_done: "Analyzing Hacker News...",
+        producthunt_done: "Scanning Product Hunt...",
+        trends_done: "Analyzing Google Trends...",
+        appstore_done: "Reviewing App Store...",
+        llm_start: "Calculating opportunity score...",
+      },
+      lockedLabels: {
+        hn_done: "Hacker News analysis",
+        appstore_done: "App Store reviews",
+      },
+    },
     error: {
       title: "A problem occurred during generation",
       requestId: "Request ID:",
@@ -784,6 +823,7 @@ export const translations = {
         category: "Guide",
         readTime: "8 min",
         date: "March 25, 2026",
+        slug: "ai-ile-saas-fikri-uretimi-rehberi",
         title: "How to Generate SaaS Ideas with AI? Step-by-Step Market Research Guide",
         excerpt:
           "The complete method for generating SaaS ideas based on real market problems by combining Google Trends, Product Hunt, and Reddit data. Every successful SaaS is built on a validated problem.",

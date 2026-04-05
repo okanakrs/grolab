@@ -2,10 +2,17 @@
 
 import { AnimatePresence, motion, type Variants } from "framer-motion";
 import { RotateCcw, ShieldCheck, Zap } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navbar } from "../../components/navbar";
-import { createCheckout } from "../../lib/mcp";
 import { useLanguage } from "../../contexts/language-context";
+import { createClient } from "../../lib/supabase";
+
+declare global {
+  interface Window {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    Paddle?: any;
+  }
+}
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 32 },
@@ -48,17 +55,73 @@ export default function PricingPage() {
   const [isLoading, setIsLoading] = useState<"pro" | "enterprise" | null>(null);
   const [isYearly, setIsYearly] = useState(false);
   const [showCompare, setShowCompare] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
+  const paddleReady = useRef(false);
   const { t } = useLanguage();
   const tp = t.pricing;
 
-  const onCheckout = async (plan: "pro" | "enterprise") => {
+  // Load Paddle.js and initialize
+  useEffect(() => {
+    const clientToken = process.env.NEXT_PUBLIC_PADDLE_CLIENT_TOKEN;
+    if (!clientToken || paddleReady.current) return;
+
+    const script = document.createElement("script");
+    script.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
+    script.async = true;
+    script.onload = () => {
+      if (window.Paddle) {
+        window.Paddle.Environment.set(
+          process.env.NEXT_PUBLIC_PADDLE_ENV === "production" ? "production" : "sandbox"
+        );
+        window.Paddle.Initialize({ token: clientToken });
+        paddleReady.current = true;
+      }
+    };
+    document.head.appendChild(script);
+    return () => {
+      document.head.removeChild(script);
+    };
+  }, []);
+
+  // Get current user ID for custom_data
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }: { data: { user: { id: string } | null } }) => {
+      setUserId(data.user?.id ?? null);
+    });
+  }, []);
+
+  const onCheckout = (plan: "pro" | "enterprise") => {
+    const priceId =
+      plan === "pro"
+        ? (isYearly ? process.env.NEXT_PUBLIC_PADDLE_PRICE_PRO_YEARLY : process.env.NEXT_PUBLIC_PADDLE_PRICE_PRO)
+        : (isYearly ? process.env.NEXT_PUBLIC_PADDLE_PRICE_ENTERPRISE_YEARLY : process.env.NEXT_PUBLIC_PADDLE_PRICE_ENTERPRISE);
+
+    if (!priceId || !window.Paddle) return;
+
     setIsLoading(plan);
-    try {
-      const checkoutUrl = await createCheckout(plan);
-      window.location.href = checkoutUrl;
-    } catch {
-      setIsLoading(null);
-    }
+
+    window.Paddle.Checkout.open({
+      items: [{ priceId, quantity: 1 }],
+      customData: userId ? { user_id: userId } : undefined,
+      settings: {
+        displayMode: "overlay",
+        theme: "dark",
+        locale: "en",
+      },
+      events: {
+        onCompleted: () => {
+          setIsLoading(null);
+          window.location.href = "/pricing?checkout=success";
+        },
+        onClose: () => {
+          setIsLoading(null);
+        },
+        onError: () => {
+          setIsLoading(null);
+        },
+      },
+    });
   };
 
   return (
@@ -198,8 +261,8 @@ export default function PricingPage() {
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={
-                    isPro ? () => void onCheckout("pro")
-                    : isEnt ? () => void onCheckout("enterprise")
+                    isPro ? () => onCheckout("pro")
+                    : isEnt ? () => onCheckout("enterprise")
                     : undefined
                   }
                   disabled={(isPro || isEnt) && isLoading !== null}
@@ -211,7 +274,12 @@ export default function PricingPage() {
                       : "cursor-default border border-zinc-800 bg-zinc-900/50 text-zinc-500"
                   }`}
                 >
-                  {loading ? tp.loading : plan.btn}
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      {tp.loading}
+                    </span>
+                  ) : plan.btn}
                 </motion.button>
               </motion.article>
             );

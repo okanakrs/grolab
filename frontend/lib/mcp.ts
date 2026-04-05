@@ -351,22 +351,3 @@ export async function analyzeIdea(idea: SaaSIdea, tool: ToolType, lang: string =
   const payload = (await response.json()) as { result?: string };
   return payload.result ?? "";
 }
-
-export async function createCheckout(plan: "pro" | "enterprise"): Promise<string> {
-  const response = await fetch(`${BACKEND_URL}/api/checkout`, {
-    method: "POST",
-    headers: await baseHeaders(),
-    body: JSON.stringify({ plan }),
-  });
-
-  if (!response.ok) {
-    throw new ApiRequestError("Checkout baslatilamadi", response.status);
-  }
-
-  const payload = (await response.json()) as { checkout_url?: string };
-  if (!payload.checkout_url) {
-    throw new ApiRequestError("Stripe checkout URL alinamadi", 500);
-  }
-
-  return payload.checkout_url;
-}

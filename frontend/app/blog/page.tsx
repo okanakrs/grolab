@@ -69,7 +69,7 @@ export default function BlogPage() {
 
         {/* Featured post */}
         <Link
-          href={`/blog/${featuredPost.title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}`}
+          href={`/blog/${featuredPost.slug}`}
           className="group mb-10 block overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02] p-7 transition hover:border-emerald-500/20 hover:bg-white/[0.04] sm:p-8"
         >
           <div className="flex flex-wrap items-center gap-3">
