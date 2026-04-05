@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { use, useEffect } from "react";
 import { Navbar } from "../../../components/navbar";
 import { useLanguage } from "../../../contexts/language-context";
 import { blogContent } from "../../../lib/blog-content";
@@ -29,16 +29,17 @@ const CATEGORY_COLORS: Record<string, string> = {
 export default function BlogPostPage({
   params,
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
+  const { slug } = use(params);
   const router = useRouter();
   const { t, lang } = useLanguage();
   const tb = t.blog;
 
   const post =
-    params.slug === tb.featuredPost.slug
+    slug === tb.featuredPost.slug
       ? { ...tb.featuredPost }
-      : tb.posts.find((p) => p.slug === params.slug) ?? null;
+      : tb.posts.find((p) => p.slug === slug) ?? null;
 
   useEffect(() => {
     if (!post) {
@@ -48,7 +49,7 @@ export default function BlogPostPage({
 
   if (!post) return null;
 
-  const content = blogContent[params.slug]?.[lang] ?? null;
+  const content = blogContent[slug]?.[lang] ?? null;
 
   return (
     <>
