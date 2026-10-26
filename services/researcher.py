@@ -154,8 +154,12 @@ async def _fetch_product_hunt(topic: str) -> list[ProductHuntProduct]:
                 p for p in await _ph_recent_top_posts()
                 if any(re.search(r"\b" + re.escape(t) + r"\b", f"{p.name} {p.tagline}".lower()) for t in tokens)
             ]
-            if matched:
+            if len(matched) >= 5:
                 return matched[:15]
+            # Az guncel eslesme: eski arsivle tamamla (yil bilgisi urunde duruyor)
+            archive = await _fetch_product_hunt_archive(topic)
+            known = {p.name.lower() for p in matched}
+            return (matched + [p for p in archive if p.name.lower() not in known])[:15]
         except Exception as error:
             logger.warning(f"product_hunt_api_failed error={error}, falling back to archive")
     return await _fetch_product_hunt_archive(topic)
