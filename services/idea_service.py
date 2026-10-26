@@ -214,17 +214,17 @@ def _build_user_prompt(topic: str, market_context: MarketContext, plan: str = "f
         return any(kw in t for kw in _SOCIAL_BLACKLIST)
 
     product_hunt_briefs = [
-        f"- {item.name}: {item.tagline} (votes={item.votes_count})"
+        f"- {item.name}: {item.tagline} (votes={item.votes_count}{f', {item.year}' if item.year else ''})"
         for item in _sample(market_context.product_hunt_products, 8)
         if not _is_social(item.name + " " + item.tagline)
     ]
     reddit_briefs = [
-        f"- r/{item.subreddit}: {item.title} (score={item.score})"
+        f"- r/{item.subreddit}: {item.title}{f' (score={item.score})' if item.score else ''}{f' | {item.snippet}' if item.snippet else ''}"
         for item in _sample(market_context.reddit_needs, 7)
         if not _is_social(item.title)
     ]
     trend_briefs = [
-        f"- {item.keyword} (trend={item.value})"
+        f"- {item.keyword} ({item.value})"
         for item in _sample(market_context.trend_keywords, 8)
         if not _is_social(item.keyword)
     ]
@@ -233,7 +233,7 @@ def _build_user_prompt(topic: str, market_context: MarketContext, plan: str = "f
         for item in _sample(getattr(market_context, "app_store_reviews", []), 6)
     ]
     hn_briefs = [
-        f"- {item.title} (score={item.score}, comments={item.comments})"
+        (f'- [user comment] "{item.title}"' if item.kind == "comment" else f"- {item.title} (score={item.score}, comments={item.comments})")
         for item in _sample(getattr(market_context, "hn_posts", []), 6)
     ]
 
@@ -252,14 +252,14 @@ def _build_user_prompt(topic: str, market_context: MarketContext, plan: str = "f
         if is_en:
             context_block = (
                 "Analyze the market signals below to extract PATTERNS, then generate ideas:\n\n"
-                "## EXISTING COMPETITORS (Product Hunt)\n"
+                "## KNOWN PRODUCTS (Product Hunt archive, may be outdated)\n"
                 f"{product_hunt_text}\n\n"
                 "## USER NEEDS (Reddit pain points)\n"
                 f"{reddit_text}\n\n"
-                "## RISING SEARCH TRENDS (Google Trends)\n"
+                "## GOOGLE SEARCH SIGNALS (Google Trends: rising / top related queries)\n"
                 f"{trend_text}\n\n"
                 f"{'## DEVELOPER/FOUNDER SIGNALS (Hacker News)' + chr(10) + hn_text + chr(10) + chr(10) if hn_text and plan in ('pro', 'enterprise') else ''}"
-                f"{'## PRODUCT COMPLAINTS & GAPS (App Store)' + chr(10) + app_store_text + chr(10) + chr(10) if app_store_text else ''}"
+                f"{'## REAL LOW-RATED APP REVIEWS (App Store)' + chr(10) + app_store_text + chr(10) + chr(10) if app_store_text else ''}"
                 "## TASK\n"
                 "Extract the following patterns from the signals above:\n"
                 "- Which problems repeat across multiple sources?\n"
@@ -270,14 +270,14 @@ def _build_user_prompt(topic: str, market_context: MarketContext, plan: str = "f
         else:
             context_block = (
                 "Asagidaki pazar sinyallerini analiz ederek PATTERN cikar, sonra fikir uret:\n\n"
-                "## MEVCUT RAKIPLER (Product Hunt)\n"
+                "## BILINEN URUNLER (Product Hunt arsivi, eski olabilir)\n"
                 f"{product_hunt_text}\n\n"
                 "## KULLANICI IHTIYACLARI (Reddit pain points)\n"
                 f"{reddit_text}\n\n"
-                "## YUKSELIS GOSTEREN ARAMALAR (Google Trends)\n"
+                "## GOOGLE ARAMA SINYALLERI (Google Trends: yukselen / en cok aranan ilgili sorgular)\n"
                 f"{trend_text}\n\n"
                 f"{'## DEVELOPER/FOUNDER SINYALLERI (Hacker News)' + chr(10) + hn_text + chr(10) + chr(10) if hn_text and plan in ('pro', 'enterprise') else ''}"
-                f"{'## MEVCUT URUN SIKAYET VE EKSIKLER (App Store)' + chr(10) + app_store_text + chr(10) + chr(10) if app_store_text else ''}"
+                f"{'## GERCEK DUSUK PUANLI YORUMLAR (App Store)' + chr(10) + app_store_text + chr(10) + chr(10) if app_store_text else ''}"
                 "## GOREV\n"
                 "Yukardaki sinyallerden su pattern'leri cikar:\n"
                 "- Hangi problemler birden fazla kaynakta tekrar ediyor?\n"
@@ -369,20 +369,20 @@ def _derive_market_evidence(market_context: MarketContext, plan: str = "free", l
     if market_context.trend_keywords:
         n = len(market_context.trend_keywords)
         market_evidence.append(
-            f"{n} rising signals found on Google in this area" if is_en
-            else f"Google'da ilgili alanda {n} yukselen sinyal bulundu"
+            f"{n} related Google Trends queries found in this area" if is_en
+            else f"Google Trends'te ilgili alanda {n} iliskili sorgu bulundu"
         )
     if market_context.product_hunt_products:
         n = len(market_context.product_hunt_products)
         market_evidence.append(
-            f"{n} similar products found on Product Hunt" if is_en
-            else f"Product Hunt'ta benzer {n} urun tespit edildi"
+            f"{n} similar products found in the Product Hunt archive" if is_en
+            else f"Product Hunt arsivinde benzer {n} urun tespit edildi"
         )
     if market_context.reddit_needs:
         n = len(market_context.reddit_needs)
         market_evidence.append(
-            f"{n} problem/need signals captured on Reddit" if is_en
-            else f"Reddit'te {n} problem/need sinyali yakalandi"
+            f"{n} related Reddit discussions found" if is_en
+            else f"Reddit'te {n} ilgili tartisma bulundu"
         )
 
     if is_pro:
@@ -398,8 +398,8 @@ def _derive_market_evidence(market_context: MarketContext, plan: str = "free", l
         if app_store_reviews:
             n = len(app_store_reviews)
             market_evidence.append(
-                f"{n} low-rated complaints analyzed on App Store" if is_en
-                else f"App Store'da {n} dusuk puanli sikayet analiz edildi"
+                f"{n} low-rated App Store reviews analyzed" if is_en
+                else f"App Store'da {n} dusuk puanli yorum analiz edildi"
             )
 
     return market_evidence[:6], trends[:6], competitors[:6]
