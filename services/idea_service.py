@@ -126,6 +126,83 @@ _RANDOM_DOMAINS = [
 ]
 
 
+_SYSTEM_PROMPT = (
+    "You are a contrarian SaaS strategist who hates obvious ideas. Output strict JSON only. "
+    "Every response must be fresh and surprising: never repeat earlier answers, never default to the "
+    "first idea that comes to mind, and avoid generic AI wrappers, dashboards, copilots and chatbots."
+)
+
+_AUDIENCES = [
+    "night-shift workers", "retired tradespeople", "immigrant-owned family businesses", "solo parents running side hustles",
+    "rural clinics", "indie game studios", "independent insurance brokers", "freight owner-operators",
+    "amateur sports league organizers", "estate-sale and auction houses", "high school teachers", "hobbyist beekeepers and farmers",
+    "wedding and event DJs", "court interpreters and translators", "small-town newspapers", "property managers of short-term rentals",
+    "ham radio and maker communities", "local government clerks", "independent music venues", "marine and boat-yard operators",
+    "home inspectors", "speech therapists", "church and temple treasurers", "esports teams",
+    "scrap metal and recycling yards", "independent film crews", "mobile mechanics", "HOA board volunteers",
+    "driving instructors", "chronic illness patients and caregivers", "university research labs", "street vendors and market stall owners",
+]
+
+_PAIN_TYPES = [
+    "a task people do in spreadsheets and hate", "money that is lost silently every month", "a legal or compliance deadline people keep missing",
+    "information trapped in WhatsApp, email threads or paper", "a handoff between two people that always breaks", "a no-show, cancellation or churn problem",
+    "a trust and verification problem", "a pricing or quoting problem", "a repetitive document-heavy workflow",
+    "a coordination problem across many small parties", "a monitoring problem where nobody notices until it is too late", "an onboarding or training bottleneck",
+]
+
+_BUSINESS_MODELS = [
+    "usage-based pricing", "a marketplace with a small take rate", "a per-seat tool with a free tier for solo users",
+    "a niche data product sold by subscription", "a white-label product resold by agencies", "a productized service powered by software",
+    "a browser extension or plugin with paid upgrades", "an API other small tools pay for", "a community plus tooling membership",
+]
+
+_TWISTS = [
+    "works mainly over SMS, WhatsApp or email with no app to install", "built around a single weekly ritual instead of a dashboard",
+    "turns a boring compliance chore into a one-click output", "uses photos or voice notes as the main input",
+    "makes the old paper or PDF process the product's data source", "does one thing in 60 seconds that currently takes a day",
+    "replaces a human intermediary", "is designed to be sold bottom-up by the end user, not by IT",
+    "lives inside a tool the audience already uses (Sheets, Shopify, Slack, QuickBooks)", "benefits from a local or regional angle big players ignore",
+]
+
+_BANNED_IDEAS = (
+    "generic AI chatbot / assistant / copilot, all-in-one platform, generic CRM, project management, to-do or habit tracker, "
+    "plain analytics dashboard, plain booking/scheduling tool, social media scheduler, AI writing tool, names ending in 'AI', 'Hub', 'Copilot' or 'Monitor'"
+)
+
+
+def _creative_brief(lang: str) -> str:
+    rng = random.Random()
+    audience = rng.choice(_AUDIENCES)
+    pain = rng.choice(_PAIN_TYPES)
+    model = rng.choice(_BUSINESS_MODELS)
+    twist = rng.choice(_TWISTS)
+    if lang == "en":
+        return (
+            "## CREATIVITY RULES (important)\n"
+            f"Starting lens for this run (bend it if it clashes with the topic, but do not ignore it): audience = {audience}; "
+            f"pain = {pain}; business model = {model}; twist = {twist}.\n"
+            f"BANNED, do not output anything resembling: {_BANNED_IDEAS}.\n"
+            "- Privately brainstorm 8 candidates, discard the 5 most obvious ones, then output the best of what remains.\n"
+            "- The idea must be unexpected yet buildable by one developer in 4-8 weeks.\n"
+            "- Name one real, narrow customer and one painful, concrete moment in the problem text.\n"
+            "- Give the product a short, distinctive, non-generic name.\n\n"
+        )
+    return (
+        "## YARATICILIK KURALLARI (onemli)\n"
+        f"Bu calisma icin baslangic mercegi (konuya uymuyorsa esnet ama gormezden gelme): kitle = {audience}; "
+        f"problem = {pain}; is modeli = {model}; aci = {twist}.\n"
+        f"YASAK, buna benzer bir sey uretme: {_BANNED_IDEAS}.\n"
+        "- Kendi icinde 8 aday dusun, en bariz 5 tanesini ele, kalanlarin en iyisini yaz.\n"
+        "- Fikir beklenmedik ama tek gelistirici tarafindan 4-8 haftada yapilabilir olmali.\n"
+        "- Problem metninde gercek, dar bir musteriyi ve somut, aci veren bir ani an.\n"
+        "- Urune kisa, ayirt edici, jenerik olmayan bir isim ver.\n\n"
+    )
+
+
+def _sample(items: list, n: int) -> list:
+    return random.sample(items, min(n, len(items)))
+
+
 def _build_user_prompt(topic: str, market_context: MarketContext, plan: str = "free", lang: str = "tr") -> str:
     topic_text = topic.strip() or "AI-driven products"
     seed = str(uuid.uuid4())[:8]
@@ -138,26 +215,26 @@ def _build_user_prompt(topic: str, market_context: MarketContext, plan: str = "f
 
     product_hunt_briefs = [
         f"- {item.name}: {item.tagline} (votes={item.votes_count})"
-        for item in market_context.product_hunt_products[:12]
+        for item in _sample(market_context.product_hunt_products, 8)
         if not _is_social(item.name + " " + item.tagline)
     ]
     reddit_briefs = [
         f"- r/{item.subreddit}: {item.title} (score={item.score})"
-        for item in market_context.reddit_needs[:10]
+        for item in _sample(market_context.reddit_needs, 7)
         if not _is_social(item.title)
     ]
     trend_briefs = [
         f"- {item.keyword} (trend={item.value})"
-        for item in market_context.trend_keywords[:12]
+        for item in _sample(market_context.trend_keywords, 8)
         if not _is_social(item.keyword)
     ]
     app_store_briefs = [
         f"- [{item.app_name} ★{item.rating}]: {item.review[:150]}"
-        for item in getattr(market_context, "app_store_reviews", [])[:10]
+        for item in _sample(getattr(market_context, "app_store_reviews", []), 6)
     ]
     hn_briefs = [
         f"- {item.title} (score={item.score}, comments={item.comments})"
-        for item in getattr(market_context, "hn_posts", [])[:10]
+        for item in _sample(getattr(market_context, "hn_posts", []), 6)
     ]
 
     product_hunt_text = "\n".join(product_hunt_briefs) or "- no_data"
@@ -236,6 +313,7 @@ def _build_user_prompt(topic: str, market_context: MarketContext, plan: str = "f
             f"[seed={seed}] "
             f"Generate an ORIGINAL SaaS idea covering this area: {topic_text}.\n"
             f"{context_block}"
+            f"{_creative_brief(lang)}"
             "Response must be valid JSON only; do not add markdown or explanations.\n"
             "JSON format must be as follows:\n"
             "{\n"
@@ -255,6 +333,7 @@ def _build_user_prompt(topic: str, market_context: MarketContext, plan: str = "f
         f"[seed={seed}] "
         f"Su alani kapsayan OZGUN bir SaaS fikri uret: {topic_text}.\n"
         f"{context_block}"
+        f"{_creative_brief(lang)}"
         "Yanit yalnizca gecerli JSON olmali; markdown veya aciklama ekleme.\n"
         "JSON formati su sekilde olmali:\n"
         "{\n"
@@ -447,7 +526,7 @@ async def _call_openai(
         "messages": [
             {
                 "role": "system",
-                "content": "You are a SaaS strategist. Output strict JSON only. Always generate fresh, unique ideas — never repeat previous responses.",
+                "content": _SYSTEM_PROMPT,
             },
             {"role": "user", "content": user_prompt},
         ],
@@ -497,7 +576,7 @@ async def _call_anthropic(
         "model": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
         "max_tokens": 4096,
         "temperature": 1.0,
-        "system": "You are a SaaS strategist. Output strict JSON only. Always generate fresh, unique ideas — never repeat previous responses.",
+        "system": _SYSTEM_PROMPT,
         "messages": [{"role": "user", "content": user_prompt + suffix}],
     }
 
