@@ -150,24 +150,6 @@ export default function HowItWorksPage() {
           })}
         </div>
 
-        {/* Technical architecture */}
-        <section className="mt-16">
-          <h2 className="mb-6 text-2xl font-bold text-white">{th.architecture.title}</h2>
-          <div className="rounded-2xl border border-white/[0.07] bg-black/30 p-6">
-            <div className="grid gap-4 sm:grid-cols-3">
-              {th.architecture.layers.map((layer) => (
-                <div key={layer.layer} className={`rounded-xl border p-4 ${layer.color}`}>
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
-                    {layer.layer}
-                  </p>
-                  <p className="mt-1.5 text-sm font-medium text-white">{layer.tech}</p>
-                  <p className="mt-2 text-xs leading-relaxed text-zinc-600">{layer.detail}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
         {/* FAQ */}
         <section className="mt-16">
           <h2 className="mb-2 text-2xl font-bold text-white">{th.faq.title}</h2>
